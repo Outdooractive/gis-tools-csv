@@ -1,0 +1,4 @@
+id,geom,name
+p1,"POINT (11.518585 48.135125)",Marienplatz
+p2,"LINESTRING (10.22 47.56, 10.30 47.62)",Trail
+p3,"POLYGON ((0 0, 0 10, 10 10, 10 0, 0 0))",Plot

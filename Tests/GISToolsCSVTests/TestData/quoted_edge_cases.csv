@@ -1,0 +1,5 @@
+id,longitude,latitude,name
+1,11.518585,48.135125,"escaped ""quote"" inside"
+2,13.376111,52.518611,"trailing spaces   "
+3,10.22,47.56,"line
+break"
