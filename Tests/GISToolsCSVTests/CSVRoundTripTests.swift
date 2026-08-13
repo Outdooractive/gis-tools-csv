@@ -89,4 +89,27 @@ final class CSVRoundTripTests: XCTestCase {
         try? FileManager.default.removeItem(at: url)
     }
 
+    func testRoundTripEWKB() throws {
+        var line = Feature(LineString(unchecked: [
+            Coordinate3D(latitude: 47.56, longitude: 10.22),
+            Coordinate3D(latitude: 47.62, longitude: 10.30),
+            Coordinate3D(latitude: 47.70, longitude: 10.45),
+        ]))
+        line.id = .int(5)
+        line.properties["name"] = "Trail"
+
+        let original = FeatureCollection([line])
+        let data = try CSVCoder.write(
+            original,
+            options: CSVWriteOptions(geometryFormat: .ewkb))
+        let roundTrip = try CSVCoder.read(from: data)
+
+        XCTAssertEqual(roundTrip.features.count, 1)
+        let lineRT = try XCTUnwrap(roundTrip.features[0].geometry as? LineString)
+        XCTAssertEqual(lineRT.coordinates.count, 3)
+        XCTAssertEqual(lineRT.coordinates[0].longitude, 10.22, accuracy: 1e-9)
+        XCTAssertEqual(roundTrip.features[0].id, .int(5))
+        XCTAssertEqual(roundTrip.features[0].properties["name"] as? String, "Trail")
+    }
+
 }

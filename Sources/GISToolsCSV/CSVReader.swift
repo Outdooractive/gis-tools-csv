@@ -113,13 +113,18 @@ enum CSVWriter {
     /// - Parameters:
     ///   - rows: The rows to serialize.
     ///   - delimiter: The field delimiter (default `","`).
+    ///   - lineEnding: The line ending used between rows (default `.lf`).
     /// - Returns: The CSV string.
-    static func write(_ rows: [[String]], delimiter: Character) -> String {
+    static func write(
+        _ rows: [[String]],
+        delimiter: Character,
+        lineEnding: CSVLineEnding = .lf
+    ) -> String {
         rows.map { row in
             row.map { escape($0, delimiter: delimiter) }.joined(separator: String(delimiter))
         }
-        .joined(separator: "\n")
-        + "\n"
+        .joined(separator: lineEnding.rawValue)
+        + lineEnding.rawValue
     }
 
     /// Quotes a field if necessary and escapes embedded quotes.

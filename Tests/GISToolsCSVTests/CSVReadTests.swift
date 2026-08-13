@@ -98,7 +98,7 @@ final class CSVReadTests: XCTestCase {
         id;longitude;latitude;name
         1;11.518585;48.135125;Marienplatz
         """.utf8)
-        let fc = try CSVCoder.read(from: data, delimiter: ";")
+        let fc = try CSVCoder.read(from: data, options: CSVReadOptions(delimiter: ";"))
         XCTAssertEqual(fc.features.count, 1)
         XCTAssertEqual(fc.features[0].properties["name"] as? String, "Marienplatz")
     }
@@ -143,6 +143,76 @@ final class CSVReadTests: XCTestCase {
                 return XCTFail("expected invalidGeometry, got \(error)")
             }
         }
+    }
+
+    // MARK: - Null handling
+
+    func testNullKeptAsStringByDefault() throws {
+        let data = Data("""
+        id,name,value,geometry
+        1,foo,NULL,"POINT (1 2)"
+        """.utf8)
+        let fc = try CSVCoder.read(from: data)
+        let feature = fc.features[0]
+        XCTAssertEqual(feature.properties["value"] as? String, "NULL")
+    }
+
+    func testNullOmittedWithOmit() throws {
+        let data = Data("""
+        id,name,value,geometry
+        1,foo,NULL,"POINT (1 2)"
+        """.utf8)
+        let fc = try CSVCoder.read(
+            from: data,
+            options: CSVReadOptions(nullHandling: .omit))
+        let feature = fc.features[0]
+        XCTAssertNil(feature.properties["value"])
+        XCTAssertEqual(feature.properties["name"] as? String, "foo")
+    }
+
+    func testNullOmittedCaseInsensitive() throws {
+        let data = Data("""
+        id,a,b,c,geometry
+        1,null,Null,NULL,"POINT (1 2)"
+        """.utf8)
+        let fc = try CSVCoder.read(
+            from: data,
+            options: CSVReadOptions(nullHandling: .omit))
+        let feature = fc.features[0]
+        XCTAssertNil(feature.properties["a"])
+        XCTAssertNil(feature.properties["b"])
+        XCTAssertNil(feature.properties["c"])
+    }
+
+    func testEmptyValueOmittedWithOmit() throws {
+        let data = Data("""
+        id,name,value,geometry
+        1,foo,,"POINT (1 2)"
+        """.utf8)
+        let fc = try CSVCoder.read(
+            from: data,
+            options: CSVReadOptions(nullHandling: .omit))
+        let feature = fc.features[0]
+        XCTAssertNil(feature.properties["value"])
+        XCTAssertEqual(feature.properties["name"] as? String, "foo")
+    }
+
+    func testEWKBGeometryNullColumnsOmitted() throws {
+        let fc = try CSVCoder.read(
+            from: dataURL.appendingPathComponent("ewkb_geometry.csv"),
+            options: CSVReadOptions(nullHandling: .omit))
+        XCTAssertEqual(fc.features.count, 1)
+
+        let feature = fc.features[0]
+        // NULL columns are omitted.
+        XCTAssertNil(feature.properties["name"])
+        XCTAssertNil(feature.properties["int_name"])
+        XCTAssertNil(feature.properties["wikidata"])
+        // Non-null columns are kept.
+        XCTAssertEqual(feature.properties["surface"] as? String, "gravel")
+        XCTAssertEqual(feature.properties["tracktype"] as? String, "grade2")
+        XCTAssertEqual(feature.properties["smoothness"] as? String, "intermediate")
+        XCTAssertEqual(feature.properties["type"] as? String, "track")
     }
 
 }

@@ -33,16 +33,16 @@ public enum CSVCoder {
     ///
     /// - Parameters:
     ///   - url: The URL of the CSV file to read.
-    ///   - delimiter: The field delimiter (default `","`).
+    ///   - options: The read options (default ``CSVReadOptions``).
     /// - Returns: A ``FeatureCollection`` with the CSV data.
     /// - Throws: ``CSVError`` if the file cannot be read or parsed.
     public static func read(
         from url: URL,
-        delimiter: Character = defaultDelimiter
+        options: CSVReadOptions = CSVReadOptions()
     ) throws -> FeatureCollection {
         do {
             let data = try Data(contentsOf: url)
-            return try read(from: data, delimiter: delimiter)
+            return try read(from: data, options: options)
         }
         catch let error as CSVError {
             throw error
@@ -56,15 +56,15 @@ public enum CSVCoder {
     ///
     /// - Parameters:
     ///   - data: The raw CSV data.
-    ///   - delimiter: The field delimiter (default `","`).
+    ///   - options: The read options (default ``CSVReadOptions``).
     /// - Returns: A ``FeatureCollection`` with the CSV data.
     /// - Throws: ``CSVError`` if the data cannot be parsed.
     public static func read(
         from data: Data,
-        delimiter: Character = defaultDelimiter
+        options: CSVReadOptions = CSVReadOptions()
     ) throws -> FeatureCollection {
-        let rows = try CSVReader.parse(data: data, delimiter: delimiter)
-        return try convertToFeatureCollection(rows: rows)
+        let rows = try CSVReader.parse(data: data, delimiter: options.delimiter)
+        return try convertToFeatureCollection(rows: rows, nullHandling: options.nullHandling)
     }
 
     // MARK: - Write
@@ -73,15 +73,15 @@ public enum CSVCoder {
     ///
     /// - Parameters:
     ///   - featureCollection: The FeatureCollection to serialize.
-    ///   - delimiter: The field delimiter (default `","`).
+    ///   - options: The write options (default ``CSVWriteOptions``).
     /// - Returns: The CSV data.
     /// - Throws: ``CSVError`` if serialization fails.
     public static func write(
         _ featureCollection: FeatureCollection,
-        delimiter: Character = defaultDelimiter
+        options: CSVWriteOptions = CSVWriteOptions()
     ) throws -> Data {
-        let rows = rows(from: featureCollection)
-        let string = CSVWriter.write(rows, delimiter: delimiter)
+        let rows = rows(from: featureCollection, options: options)
+        let string = CSVWriter.write(rows, delimiter: options.delimiter, lineEnding: options.lineEnding)
         guard let data = string.data(using: .utf8) else {
             throw CSVError.invalidEncoding
         }
@@ -93,14 +93,14 @@ public enum CSVCoder {
     /// - Parameters:
     ///   - featureCollection: The FeatureCollection to write.
     ///   - url: The output URL for the CSV file.
-    ///   - delimiter: The field delimiter (default `","`).
+    ///   - options: The write options (default ``CSVWriteOptions``).
     /// - Throws: ``CSVError`` if the file cannot be written.
     public static func write(
         _ featureCollection: FeatureCollection,
         to url: URL,
-        delimiter: Character = defaultDelimiter
+        options: CSVWriteOptions = CSVWriteOptions()
     ) throws {
-        let data = try write(featureCollection, delimiter: delimiter)
+        let data = try write(featureCollection, options: options)
         do {
             try data.write(to: url)
         }
@@ -112,7 +112,8 @@ public enum CSVCoder {
     // MARK: - Convert rows → FeatureCollection
 
     private static func convertToFeatureCollection(
-        rows: [[String]]
+        rows: [[String]],
+        nullHandling: CSVNullHandling
     ) throws -> FeatureCollection {
         guard let headerRow = rows.first, !headerRow.isEmpty else {
             throw CSVError.missingHeader
@@ -130,7 +131,7 @@ public enum CSVCoder {
                 continue
             }
             features.append(
-                try feature(from: row, mapping: mapping, line: lineIndex + 2))
+                try feature(from: row, mapping: mapping, line: lineIndex + 2, nullHandling: nullHandling))
         }
 
         return FeatureCollection(features)
@@ -139,7 +140,8 @@ public enum CSVCoder {
     private static func feature(
         from row: [String],
         mapping: CSVColumnMapping,
-        line: Int
+        line: Int,
+        nullHandling: CSVNullHandling
     ) throws -> Feature {
         var properties: [String: Sendable] = [:]
 
@@ -203,7 +205,11 @@ public enum CSVCoder {
             case .geometry, .latitude, .longitude, .altitude, .id:
                 continue
             case .property:
-                properties[header] = parseValue(row[index])
+                let value = row[index]
+                if nullHandling == .omit, isNullValue(value) {
+                    continue
+                }
+                properties[header] = parseValue(value)
             }
         }
 
@@ -211,26 +217,45 @@ public enum CSVCoder {
         return feature
     }
 
+    /// Whether a raw CSV value should be treated as null.
+    ///
+    /// `NULL` is matched case-insensitively; empty (or whitespace-only)
+    /// values are also treated as null.
+    private static func isNullValue(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty || trimmed.lowercased() == "null"
+    }
+
     // MARK: - Convert FeatureCollection → rows
 
-    private static func rows(from featureCollection: FeatureCollection) -> [[String]] {
+    private static func rows(
+        from featureCollection: FeatureCollection,
+        options: CSVWriteOptions
+    ) -> [[String]] {
         let features = featureCollection.features
 
-        if features.allSatisfy({ $0.geometry is Point }) {
-            return pointRows(features)
+        // An explicit geometry format always uses the geometry column. Only
+        // `.auto` keeps the all-points lat/lon/altitude layout.
+        if options.geometryFormat == .auto,
+           features.allSatisfy({ $0.geometry is Point })
+        {
+            return pointRows(features, options: options)
         }
-        return mixedRows(features)
+        return mixedRows(features, options: options)
     }
 
     /// Rows when every feature is a simple point.
     ///
     /// Column order: `id`, `longitude`, `latitude`, `altitude`, then the
     /// remaining property columns.
-    private static func pointRows(_ features: [Feature]) -> [[String]] {
+    private static func pointRows(
+        _ features: [Feature],
+        options: CSVWriteOptions
+    ) -> [[String]] {
         let propertyColumns = orderedPropertyColumns(features, excluding: ["longitude", "latitude", "altitude"])
         let header = ["id", "longitude", "latitude", "altitude"] + propertyColumns
 
-        var rows: [[String]] = [header]
+        var rows: [[String]] = options.includeHeader ? [header] : []
         for feature in features {
             let point = feature.geometry as! Point
             let coordinate = point.coordinate
@@ -239,33 +264,54 @@ public enum CSVCoder {
             row.append(idValue(feature.id))
             row.append(formatNumber(coordinate.longitude))
             row.append(formatNumber(coordinate.latitude))
-            row.append(coordinate.altitude.map(formatNumber) ?? "")
+            row.append(coordinate.altitude.map(formatNumber) ?? options.nullValue)
             for column in propertyColumns {
-                row.append(value(for: column, in: feature))
+                row.append(value(for: column, in: feature, nullValue: options.nullValue))
             }
             rows.append(row)
         }
         return rows
     }
 
-    /// Rows when at least one feature has a complex (non-Point) geometry.
+    /// Rows when at least one feature has a complex (non-Point) geometry, or
+    /// when an explicit geometry format is requested.
     ///
-    /// Column order: `id`, property columns, then `geometry` last.
-    private static func mixedRows(_ features: [Feature]) -> [[String]] {
-        let propertyColumns = orderedPropertyColumns(features, excluding: ["geometry"])
+    /// Column order: `id`, property columns, then the geometry column last.
+    private static func mixedRows(
+        _ features: [Feature],
+        options: CSVWriteOptions
+    ) -> [[String]] {
+        let propertyColumns = orderedPropertyColumns(features, excluding: [options.geometryColumnName])
 
         // Point features still emit their lat/lon/altitude as properties so no
-        // data is lost; complex features emit their WKT in the geometry column.
-        var rows: [[String]] = [["id"] + propertyColumns + ["geometry"]]
+        // data is lost; complex features emit their geometry in the geometry column.
+        let header = ["id"] + propertyColumns + [options.geometryColumnName]
+        var rows: [[String]] = options.includeHeader ? [header] : []
         for feature in features {
             var row: [String] = [idValue(feature.id)]
             for column in propertyColumns {
-                row.append(value(for: column, in: feature))
+                row.append(value(for: column, in: feature, nullValue: options.nullValue))
             }
-            row.append(feature.geometry.asWKT ?? "")
+            row.append(geometryValue(feature.geometry, format: options.geometryFormat))
             rows.append(row)
         }
         return rows
+    }
+
+    /// Encodes a geometry for the geometry column in the requested format.
+    private static func geometryValue(
+        _ geometry: GeoJsonGeometry,
+        format: CSVGeometryFormat
+    ) -> String {
+        switch format {
+        case .auto, .wkt:
+            return geometry.asWKT ?? ""
+        case .ewkb:
+            guard let data = WKBCoder.encode(geometry: geometry) else { return "" }
+            return data.hexEncodedString()
+        case .geojson:
+            return geometry.asJsonString() ?? ""
+        }
     }
 
     // MARK: - Property columns
@@ -291,8 +337,12 @@ public enum CSVCoder {
         return columns
     }
 
-    private static func value(for column: String, in feature: Feature) -> String {
-        guard let value = feature.properties[column] else { return "" }
+    private static func value(
+        for column: String,
+        in feature: Feature,
+        nullValue: String
+    ) -> String {
+        guard let value = feature.properties[column] else { return nullValue }
         if let number = value as? Double { return formatNumber(number) }
         if let number = value as? Int { return "\(number)" }
         if let boolean = value as? Bool { return boolean ? "true" : "false" }
@@ -347,6 +397,17 @@ public enum CSVCoder {
 
     private static func formatNumber(_ value: Double) -> String {
         String(format: "%.9g", value)
+    }
+
+}
+
+// MARK: - Data hex encoding
+
+extension Data {
+
+    /// The receiver as an uppercase hex string.
+    fileprivate func hexEncodedString() -> String {
+        map { String(format: "%02X", $0) }.joined()
     }
 
 }
