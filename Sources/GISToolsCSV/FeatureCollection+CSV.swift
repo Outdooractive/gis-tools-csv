@@ -9,9 +9,9 @@ extension FeatureCollection {
     ///
     /// - Parameters:
     ///   - csv: The URL of the CSV file.
-    ///   - delimiter: The field delimiter (default `","`).
-    public init?(csv url: URL, delimiter: Character = CSVCoder.defaultDelimiter) {
-        guard let fc = try? CSVCoder.read(from: url, delimiter: delimiter) else { return nil }
+    ///   - options: The read options (default ``CSVReadOptions``).
+    public init?(csv url: URL, options: CSVReadOptions = CSVReadOptions()) {
+        guard let fc = try? CSVCoder.read(from: url, options: options) else { return nil }
         self = fc
     }
 
@@ -19,31 +19,31 @@ extension FeatureCollection {
     ///
     /// - Parameters:
     ///   - csvData: The raw CSV data.
-    ///   - delimiter: The field delimiter (default `","`).
-    public init?(csvData: Data, delimiter: Character = CSVCoder.defaultDelimiter) {
-        guard let fc = try? CSVCoder.read(from: csvData, delimiter: delimiter) else { return nil }
+    ///   - options: The read options (default ``CSVReadOptions``).
+    public init?(csvData: Data, options: CSVReadOptions = CSVReadOptions()) {
+        guard let fc = try? CSVCoder.read(from: csvData, options: options) else { return nil }
         self = fc
     }
 
     /// Returns the receiver serialised as CSV data.
     ///
-    /// - Parameter delimiter: The field delimiter (default `","`).
+    /// - Parameter options: The write options (default ``CSVWriteOptions``).
     /// - Returns: The CSV data.
     /// - Throws: ``CSVError`` if serialization fails.
-    public func csvData(delimiter: Character = CSVCoder.defaultDelimiter) throws -> Data {
-        try CSVCoder.write(self, delimiter: delimiter)
+    public func csvData(options: CSVWriteOptions = CSVWriteOptions()) throws -> Data {
+        try CSVCoder.write(self, options: options)
     }
 
     /// Writes the receiver as a CSV file.
     ///
     /// - Parameters:
     ///   - url: The output URL (must include `.csv` extension).
-    ///   - delimiter: The field delimiter (default `","`).
+    ///   - options: The write options (default ``CSVWriteOptions``).
     public func writeCSV(
         to url: URL,
-        delimiter: Character = CSVCoder.defaultDelimiter
+        options: CSVWriteOptions = CSVWriteOptions()
     ) throws {
-        let data = try csvData(delimiter: delimiter)
+        let data = try csvData(options: options)
         try data.write(to: url)
     }
 

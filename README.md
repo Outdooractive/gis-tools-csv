@@ -44,11 +44,21 @@ let url = URL(fileURLWithPath: "/path/to/file.csv")
 let fc = try CSVCoder.read(from: url)
 
 // With a non-default delimiter:
-let fc = try CSVCoder.read(from: url, delimiter: ";")
+let fc = try CSVCoder.read(from: url, options: CSVReadOptions(delimiter: ";"))
+
+// Omit NULL and empty values from properties (e.g. PostGIS exports):
+let fc = try CSVCoder.read(from: url, options: CSVReadOptions(nullHandling: .omit))
 
 // Or via the convenience init:
 guard let fc = FeatureCollection(csv: url) else { return }
 ```
+
+`CSVReadOptions` controls how a CSV is read:
+
+| Option | Default | Description |
+|---|---|---|
+| `delimiter` | `","` | The field delimiter. |
+| `nullHandling` | `.keepAsString` | How `NULL` and empty values are treated. `.keepAsString` keeps them as strings; `.omit` drops the property entirely. `NULL` is matched case-insensitively. |
 
 ### Writing
 
@@ -60,7 +70,21 @@ try CSVCoder.write(fc, to: outputURL)
 
 // Serialize to Data:
 let data = try CSVCoder.write(fc)
+
+// Write geometry as EWKB hex:
+try CSVCoder.write(fc, to: outputURL, options: CSVWriteOptions(geometryFormat: .ewkb))
 ```
+
+`CSVWriteOptions` controls how a `FeatureCollection` is written:
+
+| Option | Default | Description |
+|---|---|---|
+| `delimiter` | `","` | The field delimiter. |
+| `geometryFormat` | `.auto` | How geometry is written. `.auto` uses `longitude`/`latitude`/`altitude` columns for all-points collections and a WKT geometry column otherwise. `.wkt`, `.ewkb` (hex), and `.geojson` always emit a geometry column. |
+| `geometryColumnName` | `"geometry"` | The name of the geometry column. |
+| `includeHeader` | `true` | Whether to write the header row. |
+| `nullValue` | `""` | The value written for `nil` properties (e.g. `"NULL"`). |
+| `lineEnding` | `.lf` | The line ending between rows (`.lf` or `.crlf`). |
 
 ### Column mapping (reading)
 
@@ -98,19 +122,21 @@ Feature ids are always written to the `id` column (empty if a feature has none).
 
 | API | Description |
 |---|---|
-| `CSVCoder.read(from url:delimiter:)` | Reads a CSV file into a `FeatureCollection` |
-| `CSVCoder.read(from data:delimiter:)` | Reads CSV data into a `FeatureCollection` |
-| `CSVCoder.write(_:delimiter:)` | Serializes a `FeatureCollection` to CSV `Data` |
-| `CSVCoder.write(_:to:delimiter:)` | Writes a `FeatureCollection` to a CSV file |
-| `FeatureCollection(csv:)` | Convenience init from a CSV file |
-| `FeatureCollection(csvData:)` | Convenience init from CSV data |
-| `FeatureCollection.csvData(delimiter:)` | Serializes the receiver to CSV `Data` |
-| `FeatureCollection.writeCSV(to:delimiter:)` | Writes the receiver as a CSV file |
+| `CSVCoder.read(from url:options:)` | Reads a CSV file into a `FeatureCollection` |
+| `CSVCoder.read(from data:options:)` | Reads CSV data into a `FeatureCollection` |
+| `CSVCoder.write(_:options:)` | Serializes a `FeatureCollection` to CSV `Data` |
+| `CSVCoder.write(_:to:options:)` | Writes a `FeatureCollection` to a CSV file |
+| `CSVReadOptions` | Options controlling CSV reading (`delimiter`, `nullHandling`) |
+| `CSVWriteOptions` | Options controlling CSV writing (`delimiter`, `geometryFormat`, `geometryColumnName`, `includeHeader`, `nullValue`, `lineEnding`) |
+| `FeatureCollection(csv:options:)` | Convenience init from a CSV file |
+| `FeatureCollection(csvData:options:)` | Convenience init from CSV data |
+| `FeatureCollection.csvData(options:)` | Serializes the receiver to CSV `Data` |
+| `FeatureCollection.writeCSV(to:options:)` | Writes the receiver as a CSV file |
 
 ## Limitations
 
 - A header row is required — geometry columns are never guessed.
-- Written geometry always uses the `geometry` column name (even if `geom` was read) and is emitted as WKT.
+- Written geometry uses the configured `geometryColumnName` (default `geometry`) and is emitted as WKT by default.
 - Property columns on write are ordered by first appearance across all features.
 
 ## Contributing

@@ -13,7 +13,7 @@ final class CSVFormatTests: XCTestCase {
     func testReadSemicolonFile() throws {
         let fc = try CSVCoder.read(
             from: dataURL.appendingPathComponent("points_semicolon.csv"),
-            delimiter: ";")
+            options: CSVReadOptions(delimiter: ";"))
         XCTAssertEqual(fc.features.count, 3)
         let first = try XCTUnwrap(fc.features.first)
         let point = try XCTUnwrap(first.geometry as? Point)
@@ -24,7 +24,7 @@ final class CSVFormatTests: XCTestCase {
     func testReadTabFile() throws {
         let fc = try CSVCoder.read(
             from: dataURL.appendingPathComponent("points_tab.csv"),
-            delimiter: "\t")
+            options: CSVReadOptions(delimiter: "\t"))
         XCTAssertEqual(fc.features.count, 3)
         XCTAssertEqual(fc.features[1].properties["name"] as? String, "Reichstag")
         let point = try XCTUnwrap(fc.features[2].geometry as? Point)
@@ -34,7 +34,7 @@ final class CSVFormatTests: XCTestCase {
     func testReadPipeFile() throws {
         let fc = try CSVCoder.read(
             from: dataURL.appendingPathComponent("points_pipe.csv"),
-            delimiter: "|")
+            options: CSVReadOptions(delimiter: "|"))
         XCTAssertEqual(fc.features.count, 2)
         XCTAssertEqual(fc.features[0].id, .int(1))
         XCTAssertEqual(fc.features[1].properties["name"] as? String, "Reichstag")
@@ -43,7 +43,7 @@ final class CSVFormatTests: XCTestCase {
     func testReadSemicolonQuoted() throws {
         let fc = try CSVCoder.read(
             from: dataURL.appendingPathComponent("points_semicolon_quoted.csv"),
-            delimiter: ";")
+            options: CSVReadOptions(delimiter: ";"))
         XCTAssertEqual(fc.features.count, 2)
         // Quoted field keeps its delimiter.
         XCTAssertEqual(fc.features[0].properties["name"] as? String, "Munich, Bavaria; note")
