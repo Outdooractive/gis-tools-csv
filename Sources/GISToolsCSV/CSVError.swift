@@ -26,9 +26,9 @@ public enum CSVError: LocalizedError, Equatable {
     /// - Parameter detail: A description.
     case invalidCoordinate(detail: String)
 
-    /// A `geometry`/`geom` column could not be parsed as WKT.
-    /// - Parameter detail: The underlying WKT error.
-    case invalidWKT(detail: String)
+    /// A `geometry`/`geom` column could not be parsed as a geometry.
+    /// - Parameter detail: The underlying geometry error.
+    case invalidGeometry(detail: String)
 
     /// A human-readable description of the error.
     public var errorDescription: String? {
@@ -45,8 +45,8 @@ public enum CSVError: LocalizedError, Equatable {
             "CSV row \(line) has no geometry (no geometry/geom column and no latitude/longitude pair)."
         case .invalidCoordinate(let detail):
             "Invalid coordinate: \(detail)"
-        case .invalidWKT(let detail):
-            "Invalid WKT geometry: \(detail)"
+        case .invalidGeometry(let detail):
+            "Invalid geometry: \(detail)"
         }
     }
 

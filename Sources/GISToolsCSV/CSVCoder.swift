@@ -149,19 +149,17 @@ public enum CSVCoder {
            geometryIndex < row.count,
            !row[geometryIndex].isEmpty
         {
-            let wkt = row[geometryIndex]
+            let text = row[geometryIndex]
             do {
-                // The decoder auto-detects an `SRID=…;` prefix when no source
-                // projection is given. Plain WKT has no prefix, so fall back
-                // to EPSG:4326 in that case.
-                let sourceProjection: Projection? =
-                    wkt.hasPrefix("SRID=") ? nil : .epsg4326
-                geometry = try WKTCoder.decode(
-                    wkt: wkt,
-                    sourceProjection: sourceProjection)
+                // The reader auto-detects the format: WKT (with or without an
+                // `SRID=…;` prefix), hex-encoded WKB/EWKB/TWKB, or GeoJSON.
+                guard let decoded = GeoJsonReader.geometryFrom(string: text) else {
+                    throw CSVError.invalidGeometry(detail: "row \(line): could not parse geometry")
+                }
+                geometry = decoded
             }
             catch {
-                throw CSVError.invalidWKT(detail: error.localizedDescription)
+                throw CSVError.invalidGeometry(detail: error.localizedDescription)
             }
         }
         else if let latitudeIndex = mapping.latitudeIndex,
