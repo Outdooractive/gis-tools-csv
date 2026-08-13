@@ -68,6 +68,23 @@ final class CSVReadTests: XCTestCase {
         XCTAssertEqual(point.coordinate.latitude, 48.1, accuracy: 1e-9)
     }
 
+    func testReadEWKBGeometry() throws {
+        let fc = try CSVCoder.read(from: dataURL.appendingPathComponent("ewkb_geometry.csv"))
+        XCTAssertEqual(fc.features.count, 1)
+
+        let feature = fc.features[0]
+        XCTAssertEqual(feature.id, .int(241458031))
+
+        let line = try XCTUnwrap(feature.geometry as? LineString)
+        XCTAssertEqual(line.coordinates.count, 15)
+        XCTAssertEqual(line.coordinates[0].longitude, 10.184617401417709, accuracy: 1e-6)
+        XCTAssertEqual(line.coordinates[0].latitude, 47.53870670004494, accuracy: 1e-6)
+
+        XCTAssertEqual(feature.properties["surface"] as? String, "gravel")
+        XCTAssertEqual(feature.properties["tracktype"] as? String, "grade2")
+        XCTAssertEqual(feature.properties["smoothness"] as? String, "intermediate")
+    }
+
     func testReadQuotedFields() throws {
         let fc = try CSVCoder.read(from: dataURL.appendingPathComponent("points_quoted.csv"))
         XCTAssertEqual(fc.features.count, 2)
@@ -116,14 +133,14 @@ final class CSVReadTests: XCTestCase {
         }
     }
 
-    func testInvalidWKTThrows() {
+    func testInvalidGeometryThrows() {
         let data = Data("""
         id,geometry
         a,"NOT WKT"
         """.utf8)
         XCTAssertThrowsError(try CSVCoder.read(from: data)) { error in
-            guard case CSVError.invalidWKT = error else {
-                return XCTFail("expected invalidWKT, got \(error)")
+            guard case CSVError.invalidGeometry = error else {
+                return XCTFail("expected invalidGeometry, got \(error)")
             }
         }
     }

@@ -6,7 +6,7 @@ CSV read and write support for Swift, built on top of [**gis-tools**](https://gi
 
 - Reads and writes CSV files, with a configurable delimiter (`,` `;` `\t` or any character)
 - **Header required** — geometry is never guessed
-- Geometry columns (`geometry`, `geom`) parsed as **WKT**
+- Geometry columns (`geometry`, `geom`) parsed with **format auto-detection**: WKT (with or without an `SRID=…;` prefix), hex-encoded WKB/EWKB/TWKB, or GeoJSON
 - Point geometry from `latitude`/`longitude` (and aliases), with optional `altitude`
 - Feature ids from an `id` column (and many aliases), matched case-insensitively
 - All other columns become `Feature` properties (booleans, ints, doubles, strings)
@@ -68,7 +68,7 @@ The header row is matched **case-insensitively**:
 
 | Role            | Accepted column names                          |
 |-----------------|------------------------------------------------|
-| Geometry (WKT)  | `geometry`, `geom`                             |
+| Geometry        | `geometry`, `geom`                             |
 | Latitude        | `latitude`, `lat`                              |
 | Longitude       | `longitude`, `long`, `lng`                     |
 | Altitude        | `altitude`, `elevation`, `elev`, `z`           |
@@ -76,7 +76,7 @@ The header row is matched **case-insensitively**:
 
 Any other column becomes a ``Feature`` property. Numeric properties are parsed as `Int` or `Double`, `true`/`false` as `Bool`, everything else stays a `String`.
 
-If a row has a `geometry` column it is used as-is (parsed as WKT, so it may be a `Point`, `LineString`, `Polygon`, …). Otherwise, if a latitude and longitude column are both present, a `Point` is built. A row with neither is an error.
+If a row has a `geometry` column it is used as-is. The format is auto-detected, so it may be WKT (e.g. `POINT (11.5 48.1)` or `SRID=4326;LINESTRING (…)`), a hex-encoded PostGIS EWKB/WKB/TWKB string, or GeoJSON — and it may decode to a `Point`, `LineString`, `Polygon`, … Otherwise, if a latitude and longitude column are both present, a `Point` is built. A row with neither is an error.
 
 ### Column mapping (writing)
 
@@ -110,7 +110,7 @@ Feature ids are always written to the `id` column (empty if a feature has none).
 ## Limitations
 
 - A header row is required — geometry columns are never guessed.
-- Written geometry always uses the `geometry` column name (even if `geom` was read).
+- Written geometry always uses the `geometry` column name (even if `geom` was read) and is emitted as WKT.
 - Property columns on write are ordered by first appearance across all features.
 
 ## Contributing

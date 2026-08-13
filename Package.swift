@@ -16,7 +16,7 @@ let package = Package(
             targets: ["GISToolsCSV"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/Outdooractive/gis-tools.git", from: "2.0.0"),
+        .package(url: "https://github.com/Outdooractive/gis-tools.git", from: "2.3.0"),
     ],
     targets: [
         .target(
