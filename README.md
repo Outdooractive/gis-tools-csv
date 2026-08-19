@@ -5,6 +5,7 @@ CSV read and write support for Swift, built on top of [**gis-tools**](https://gi
 ## Features
 
 - Reads and writes CSV files, with a configurable delimiter (`,` `;` `\t` or any character)
+- Works directly with Postgres/Postgis CSV exports (`COPY TO`)
 - **Header required** — geometry is never guessed
 - Geometry columns (`geometry`, `geom`) parsed with **format auto-detection**: WKT (with or without an `SRID=…;` prefix), hex-encoded WKB/EWKB/TWKB, or GeoJSON
 - Point geometry from `latitude`/`longitude` (and aliases), with optional `altitude`
