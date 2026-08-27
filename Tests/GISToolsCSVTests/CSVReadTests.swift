@@ -145,6 +145,78 @@ final class CSVReadTests: XCTestCase {
         }
     }
 
+    // MARK: - Treat as line string
+
+    func testTreatAsLineStringFromLatLon() throws {
+        let fc = try CSVCoder.read(
+            from: dataURL.appendingPathComponent("breitachklamm.csv"),
+            options: CSVReadOptions(treatAsLineString: true))
+
+        XCTAssertEqual(fc.features.count, 1)
+        let line = try XCTUnwrap(fc.features[0].geometry as? LineString)
+        XCTAssertEqual(line.coordinates.count, 3180)
+        XCTAssertNil(fc.features[0].id)
+        XCTAssertTrue(fc.features[0].properties.isEmpty)
+
+        XCTAssertEqual(line.coordinates[0].latitude, 47.401810, accuracy: 1e-9)
+        XCTAssertEqual(line.coordinates[0].longitude, 10.230148, accuracy: 1e-9)
+        XCTAssertEqual(line.coordinates[0].altitude, 826.762191)
+        XCTAssertEqual(line.coordinates[3179].latitude, 47.399769, accuracy: 1e-9)
+        XCTAssertEqual(line.coordinates[3179].longitude, 10.222358, accuracy: 1e-9)
+    }
+
+    func testTreatAsLineStringFromGeometryColumn() throws {
+        let data = Data("""
+        id,geometry
+        p1,"POINT (1 2)"
+        p2,"MULTIPOINT (3 4, 5 6)"
+        p3,"LINESTRING (7 8, 9 10)"
+        p4,"MULTILINESTRING ((11 12, 13 14), (15 16, 17 18))"
+        """.utf8)
+        let fc = try CSVCoder.read(from: data, options: CSVReadOptions(treatAsLineString: true))
+
+        XCTAssertEqual(fc.features.count, 1)
+        let line = try XCTUnwrap(fc.features[0].geometry as? LineString)
+        let expected: [(Double, Double)] = [(1, 2), (3, 4), (5, 6), (7, 8), (9, 10), (11, 12), (13, 14), (15, 16), (17, 18)]
+        XCTAssertEqual(line.coordinates.count, expected.count)
+        for (coordinate, (longitude, latitude)) in zip(line.coordinates, expected) {
+            XCTAssertEqual(coordinate.longitude, longitude, accuracy: 1e-9)
+            XCTAssertEqual(coordinate.latitude, latitude, accuracy: 1e-9)
+        }
+    }
+
+    func testTreatAsLineStringTooFewCoordinatesThrows() {
+        let data = Data("""
+        latitude,longitude
+        48.1,11.5
+        """.utf8)
+        XCTAssertThrowsError(try CSVCoder.read(from: data, options: CSVReadOptions(treatAsLineString: true))) { error in
+            guard case CSVError.invalidGeometry = error else {
+                return XCTFail("expected invalidGeometry, got \(error)")
+            }
+        }
+    }
+
+    func testTreatAsLineStringIncompatibleGeometryThrows() {
+        let data = Data("""
+        id,geometry
+        p1,"POINT (1 2)"
+        p2,"POLYGON ((0 0, 0 10, 10 10, 10 0, 0 0))"
+        """.utf8)
+        XCTAssertThrowsError(try CSVCoder.read(from: data, options: CSVReadOptions(treatAsLineString: true))) { error in
+            guard case CSVError.invalidGeometry(let detail) = error else {
+                return XCTFail("expected invalidGeometry, got \(error)")
+            }
+            XCTAssertTrue(detail.contains("row 3"), "expected row 3 in detail, got \(detail)")
+        }
+    }
+
+    func testDefaultOptionsKeepPointFeatures() throws {
+        let fc = try CSVCoder.read(from: dataURL.appendingPathComponent("breitachklamm.csv"))
+        XCTAssertEqual(fc.features.count, 3180)
+        XCTAssertTrue(fc.features[0].geometry is Point)
+    }
+
     // MARK: - Null handling
 
     func testNullKeptAsStringByDefault() throws {

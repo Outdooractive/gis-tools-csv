@@ -50,6 +50,9 @@ let fc = try CSVCoder.read(from: url, options: CSVReadOptions(delimiter: ";"))
 // Omit NULL and empty values from properties (e.g. PostGIS exports):
 let fc = try CSVCoder.read(from: url, options: CSVReadOptions(nullHandling: .omit))
 
+// Concatenate all coordinates into a single LineString (e.g. GPS tracks):
+let fc = try CSVCoder.read(from: url, options: CSVReadOptions(treatAsLineString: true))
+
 // Or via the convenience init:
 guard let fc = FeatureCollection(csv: url) else { return }
 ```
@@ -60,6 +63,7 @@ guard let fc = FeatureCollection(csv: url) else { return }
 |---|---|---|
 | `delimiter` | `","` | The field delimiter. |
 | `nullHandling` | `.keepAsString` | How `NULL` and empty values are treated. `.keepAsString` keeps them as strings; `.omit` drops the property entirely. `NULL` is matched case-insensitively. |
+| `treatAsLineString` | `false` | Concatenates the coordinates of all rows (in row order) into a single `LineString` feature, dropping row properties and ids. Works for `latitude`/`longitude` rows and for `POINT`/`MULTIPOINT`/`LINESTRING`/`MULTILINESTRING` geometries in a `geometry`/`geom` column; other geometry types and fewer than 2 coordinates in total are errors. |
 
 ### Writing
 
