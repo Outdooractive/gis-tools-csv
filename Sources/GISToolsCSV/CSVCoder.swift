@@ -64,7 +64,10 @@ public enum CSVCoder {
         options: CSVReadOptions = CSVReadOptions()
     ) throws -> FeatureCollection {
         let rows = try CSVReader.parse(data: data, delimiter: options.delimiter)
-        return try convertToFeatureCollection(rows: rows, nullHandling: options.nullHandling)
+        return try convertToFeatureCollection(
+            rows: rows,
+            nullHandling: options.nullHandling,
+            treatAsLineString: options.treatAsLineString)
     }
 
     // MARK: - Write
@@ -113,7 +116,8 @@ public enum CSVCoder {
 
     private static func convertToFeatureCollection(
         rows: [[String]],
-        nullHandling: CSVNullHandling
+        nullHandling: CSVNullHandling,
+        treatAsLineString: Bool = false
     ) throws -> FeatureCollection {
         guard let headerRow = rows.first, !headerRow.isEmpty else {
             throw CSVError.missingHeader
@@ -125,6 +129,7 @@ public enum CSVCoder {
         }
 
         var features: [Feature] = []
+        var lineNumbers: [Int] = []
         for (lineIndex, row) in rows.dropFirst().enumerated() {
             // Skip fully empty lines.
             if row.allSatisfy({ $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
@@ -132,9 +137,59 @@ public enum CSVCoder {
             }
             features.append(
                 try feature(from: row, mapping: mapping, line: lineIndex + 2, nullHandling: nullHandling))
+            lineNumbers.append(lineIndex + 2)
+        }
+
+        if treatAsLineString {
+            return try flattenToLineString(features: features, lineNumbers: lineNumbers)
         }
 
         return FeatureCollection(features)
+    }
+
+    /// Concatenates the coordinates of all features (in order) into a single
+    /// `LineString` feature.
+    ///
+    /// - Parameters:
+    ///   - features: The parsed features.
+    ///   - lineNumbers: The CSV line number for each feature (for error messages).
+    /// - Returns: A `FeatureCollection` with a single `LineString` feature.
+    /// - Throws: ``CSVError`` for unsupported geometry types or fewer than
+    ///   2 coordinates in total.
+    private static func flattenToLineString(
+        features: [Feature],
+        lineNumbers: [Int]
+    ) throws -> FeatureCollection {
+        var coordinates: [Coordinate3D] = []
+        for (feature, line) in zip(features, lineNumbers) {
+            switch feature.geometry {
+            case let point as Point:
+                coordinates.append(point.coordinate)
+            case let multiPoint as MultiPoint:
+                coordinates.append(contentsOf: multiPoint.coordinates)
+            case let lineString as LineString:
+                coordinates.append(contentsOf: lineString.coordinates)
+            case let multiLineString as MultiLineString:
+                for lineString in multiLineString.coordinates {
+                    coordinates.append(contentsOf: lineString)
+                }
+            default:
+                throw CSVError.invalidGeometry(
+                    detail: "row \(line): \(type(of: feature.geometry)) cannot be converted to a LineString")
+            }
+        }
+
+        guard coordinates.count >= 2 else {
+            throw CSVError.invalidGeometry(
+                detail: "at least 2 coordinates are required for a LineString, got \(coordinates.count)")
+        }
+
+        guard let lineString = LineString(coordinates) else {
+            throw CSVError.invalidGeometry(
+                detail: "at least 2 coordinates are required for a LineString, got \(coordinates.count)")
+        }
+
+        return FeatureCollection([Feature(lineString)])
     }
 
     private static func feature(

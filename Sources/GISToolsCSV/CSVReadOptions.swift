@@ -25,17 +25,31 @@ public struct CSVReadOptions: Sendable {
     /// How `NULL` and empty values are handled (default `.keepAsString`).
     public var nullHandling: CSVNullHandling
 
+    /// When enabled, the coordinates of all rows are concatenated (in row
+    /// order) into a single `LineString` feature (default `false`).
+    ///
+    /// Works for rows providing `latitude`/`longitude` columns (optionally
+    /// with `altitude`) as well as for a `geometry`/`geom` column containing
+    /// `POINT`, `MULTIPOINT`, `LINESTRING`, or `MULTILINESTRING` geometries
+    /// (their coordinates are flattened in order). Any other geometry type
+    /// is an error, and the result must contain at least 2 coordinates.
+    /// Row properties and ids are dropped.
+    public var treatAsLineString: Bool
+
     /// Creates read options.
     ///
     /// - Parameters:
     ///   - delimiter: The field delimiter (default `","`).
     ///   - nullHandling: How `NULL` and empty values are handled (default `.keepAsString`).
+    ///   - treatAsLineString: Concatenate all coordinates into a single `LineString` (default `false`).
     public init(
         delimiter: Character = CSVCoder.defaultDelimiter,
-        nullHandling: CSVNullHandling = .keepAsString
+        nullHandling: CSVNullHandling = .keepAsString,
+        treatAsLineString: Bool = false
     ) {
         self.delimiter = delimiter
         self.nullHandling = nullHandling
+        self.treatAsLineString = treatAsLineString
     }
 
 }
