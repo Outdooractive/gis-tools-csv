@@ -1,10 +1,12 @@
-import XCTest
+import Foundation
 import GISTools
 @testable import GISToolsCSV
+import Testing
 
-final class CSVRoundTripTests: XCTestCase {
+struct CSVRoundTripTests {
 
-    func testRoundTripPoints() throws {
+    @Test
+    func roundTripPoints() throws {
         var a = Feature(Point(Coordinate3D(latitude: 48.135125, longitude: 11.518585, altitude: 520.0)))
         a.id = .int(1)
         a.properties["name"] = "Marienplatz"
@@ -18,19 +20,20 @@ final class CSVRoundTripTests: XCTestCase {
         let data = try CSVCoder.write(original)
         let roundTrip = try CSVCoder.read(from: data)
 
-        XCTAssertEqual(roundTrip.features.count, 2)
+        #expect(roundTrip.features.count == 2)
 
         let first = roundTrip.features[0]
-        XCTAssertEqual(first.id, .int(1))
-        let point = try XCTUnwrap(first.geometry as? Point)
-        XCTAssertEqual(point.coordinate.longitude, 11.518585, accuracy: 1e-9)
-        XCTAssertEqual(point.coordinate.latitude, 48.135125, accuracy: 1e-9)
-        XCTAssertEqual(point.coordinate.altitude ?? -1, 520.0, accuracy: 1e-9)
-        XCTAssertEqual(first.properties["name"] as? String, "Marienplatz")
-        XCTAssertEqual(first.properties["population"] as? Int, 1_400_000)
+        #expect(first.id == .int(1))
+        let point = try #require(first.geometry as? Point)
+        #expect(abs(point.coordinate.longitude - 11.518585) < 0.0000000001)
+        #expect(abs(point.coordinate.latitude - 48.135125) < 0.0000000001)
+        #expect(abs((point.coordinate.altitude ?? -1.0) - 520.0) < 0.0000000001)
+        #expect(first.properties["name"] as? String == "Marienplatz")
+        #expect(first.properties["population"] as? Int == 1_400_000)
     }
 
-    func testRoundTripComplex() throws {
+    @Test
+    func roundTripComplex() throws {
         var line = Feature(LineString(unchecked: [
             Coordinate3D(latitude: 47.56, longitude: 10.22),
             Coordinate3D(latitude: 47.62, longitude: 10.30),
@@ -53,21 +56,22 @@ final class CSVRoundTripTests: XCTestCase {
         let data = try CSVCoder.write(original)
         let roundTrip = try CSVCoder.read(from: data)
 
-        XCTAssertEqual(roundTrip.features.count, 2)
+        #expect(roundTrip.features.count == 2)
 
-        let lineRT = try XCTUnwrap(roundTrip.features[0].geometry as? LineString)
-        XCTAssertEqual(lineRT.coordinates.count, 3)
-        XCTAssertEqual(lineRT.coordinates[0].longitude, 10.22, accuracy: 1e-9)
-        XCTAssertEqual(roundTrip.features[0].id, .int(5))
+        let lineRT = try #require(roundTrip.features[0].geometry as? LineString)
+        #expect(lineRT.coordinates.count == 3)
+        #expect(abs(lineRT.coordinates[0].longitude - 10.22) < 0.0000000001)
+        #expect(roundTrip.features[0].id == .int(5))
 
-        let polygonRT = try XCTUnwrap(roundTrip.features[1].geometry as? GISTools.Polygon)
-        XCTAssertEqual(polygonRT.rings.count, 1)
-        XCTAssertEqual(polygonRT.rings[0].coordinates.count, 5)
-        XCTAssertEqual(roundTrip.features[1].id, .int(6))
-        XCTAssertEqual(roundTrip.features[1].properties["name"] as? String, "Plot")
+        let polygonRT = try #require(roundTrip.features[1].geometry as? GISTools.Polygon)
+        #expect(polygonRT.rings.count == 1)
+        #expect(polygonRT.rings[0].coordinates.count == 5)
+        #expect(roundTrip.features[1].id == .int(6))
+        #expect(roundTrip.features[1].properties["name"] as? String == "Plot")
     }
 
-    func testRoundTripViaFile() throws {
+    @Test
+    func roundTripViaFile() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("roundtrip-\(UUID().uuidString).csv")
 
@@ -78,18 +82,17 @@ final class CSVRoundTripTests: XCTestCase {
         let fc = FeatureCollection([a])
         try fc.writeCSV(to: url)
 
-        guard let loaded = FeatureCollection(csv: url) else {
-            return XCTFail("failed to read back")
-        }
+        let loaded = try #require(FeatureCollection(csv: url))
 
-        XCTAssertEqual(loaded.features.count, 1)
-        let point = try XCTUnwrap(loaded.features[0].geometry as? Point)
-        XCTAssertEqual(point.coordinate.latitude, 48.135125, accuracy: 1e-9)
+        #expect(loaded.features.count == 1)
+        let point = try #require(loaded.features[0].geometry as? Point)
+        #expect(abs(point.coordinate.latitude - 48.135125) < 0.0000000001)
 
         try? FileManager.default.removeItem(at: url)
     }
 
-    func testRoundTripEWKB() throws {
+    @Test
+    func roundTripEWKB() throws {
         var line = Feature(LineString(unchecked: [
             Coordinate3D(latitude: 47.56, longitude: 10.22),
             Coordinate3D(latitude: 47.62, longitude: 10.30),
@@ -104,12 +107,12 @@ final class CSVRoundTripTests: XCTestCase {
             options: CSVWriteOptions(geometryFormat: .ewkb))
         let roundTrip = try CSVCoder.read(from: data)
 
-        XCTAssertEqual(roundTrip.features.count, 1)
-        let lineRT = try XCTUnwrap(roundTrip.features[0].geometry as? LineString)
-        XCTAssertEqual(lineRT.coordinates.count, 3)
-        XCTAssertEqual(lineRT.coordinates[0].longitude, 10.22, accuracy: 1e-9)
-        XCTAssertEqual(roundTrip.features[0].id, .int(5))
-        XCTAssertEqual(roundTrip.features[0].properties["name"] as? String, "Trail")
+        #expect(roundTrip.features.count == 1)
+        let lineRT = try #require(roundTrip.features[0].geometry as? LineString)
+        #expect(lineRT.coordinates.count == 3)
+        #expect(abs(lineRT.coordinates[0].longitude - 10.22) < 0.0000000001)
+        #expect(roundTrip.features[0].id == .int(5))
+        #expect(roundTrip.features[0].properties["name"] as? String == "Trail")
     }
 
 }
