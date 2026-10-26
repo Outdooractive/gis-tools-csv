@@ -8,13 +8,13 @@ CSV read and write support for Swift, built on top of [**gis-tools**](https://gi
 - Works directly with Postgres/PostGIS CSV exports (`COPY TO`)
 - **Header required** — geometry is never guessed
 - Geometry columns (`geometry`, `geom`) parsed with **format auto-detection**: WKT (with or without an `SRID=…;` prefix), hex-encoded WKB/EWKB/TWKB, or GeoJSON
-- Point geometry from `latitude`/`longitude` (and aliases, including `lat`, `lon`, `lng`), with optional altitude
+- Point geometry from `latitude`/`longitude` or `x`/`y` columns (including `lat`, `lon`, `lng` aliases), with optional altitude and any registered projection
 - Feature ids from an `id` column (and many aliases), matched case-insensitively
 - All other columns become `Feature` properties (booleans, ints, doubles, strings)
 - RFC 4180-style quoting: embedded delimiters, quotes, and newlines
 - UTF-8 input with an optional byte order mark; `\n`, `\r\n`, and lone `\r` line endings
 - Unlocated features are supported through empty or `NULL` geometry cells
-- Deterministic output, with geometry in EPSG:4326 and typed double properties
+- Deterministic output, with coordinates in the collection or requested projection and typed double properties
 
 ## Requirements
 
@@ -52,6 +52,11 @@ let fc = try CSVCoder.read(from: url)
 // With a non-default delimiter:
 let fc = try CSVCoder.read(from: url, options: CSVReadOptions(delimiter: ";"))
 
+// Projected CSV: x/y values are EPSG:3857 coordinates, not degrees:
+let fc = try CSVCoder.read(
+    from: url,
+    options: CSVReadOptions(projection: .epsg3857))
+
 // Omit NULL and empty values from properties (e.g. PostGIS exports):
 let fc = try CSVCoder.read(from: url, options: CSVReadOptions(nullHandling: .omit))
 
@@ -68,6 +73,7 @@ guard let fc = FeatureCollection(csv: url) else { return }
 |---|---|---|
 | `delimiter` | `","` | The field delimiter. Any single `Character` is accepted. |
 | `nullHandling` | `.keepAsString` | How `NULL` and empty values are treated. `.keepAsString` keeps them as strings; `.omit` drops the property entirely. `NULL` is matched case-insensitively. Null handling also applies to the id column and an optional altitude. |
+| `projection` | `.epsg4326` | The CRS of the coordinate values. For non-4326 projections, longitude/latitude or x/y columns are treated as x/y and validated against that projection. |
 | `treatAsLineString` | `false` | Concatenates the coordinates of all rows (in row order) into a single `LineString` feature, dropping row properties and ids. Works for `latitude`/`longitude` rows and for `POINT`/`MULTIPOINT`/`LINESTRING`/`MULTILINESTRING` geometries in a `geometry`/`geom` column; other geometry types and fewer than 2 coordinates in total are errors. |
 
 ### Writing
@@ -83,6 +89,12 @@ let data = try CSVCoder.write(fc)
 
 // Write geometry as EWKB hex:
 try CSVCoder.write(fc, to: outputURL, options: CSVWriteOptions(geometryFormat: .ewkb))
+
+// Reproject points to Web Mercator and use x/y columns:
+try CSVCoder.write(
+    fc,
+    to: outputURL,
+    options: CSVWriteOptions(projection: .epsg3857))
 ```
 
 `CSVWriteOptions` controls how a `FeatureCollection` is written:
@@ -90,7 +102,9 @@ try CSVCoder.write(fc, to: outputURL, options: CSVWriteOptions(geometryFormat: .
 | Option | Default | Description |
 |---|---|---|
 | `delimiter` | `","` | The field delimiter. |
-| `geometryFormat` | `.auto` | How geometry is written. `.auto` uses `longitude`/`latitude`/`altitude` columns for all-points collections in EPSG:4326 and a WKT geometry column otherwise. `.wkt`, `.ewkb` (hex), and `.geojson` always emit a geometry column. |
+| `projection` | `nil` | Output projection. `nil` preserves the collection projection; a value reprojects first. |
+| `coordinateColumns` | `.automatic` | Point layout names: `.automatic` uses longitude/latitude/altitude for EPSG:4326 and x/y/z otherwise; `.longitudeLatitude` and `.xy` force a style. |
+| `geometryFormat` | `.auto` | How geometry is written. `.auto` uses the point layout for all-point collections and a WKT geometry column otherwise. `.wkt`, `.ewkb` (hex), and `.geojson` always emit a geometry column. |
 | `geometryColumnName` | `"geometry"` | The name of the geometry column. It must not be empty or collide with a coordinate/id column. |
 | `includeHeader` | `true` | Whether to write the header row. |
 | `nullValue` | `""` | The value written for `nil` properties and a missing altitude (e.g. `"NULL"`). |
@@ -103,24 +117,27 @@ The header row is matched **case-insensitively**:
 | Role            | Accepted column names                          |
 |-----------------|------------------------------------------------|
 | Geometry        | `geometry`, `geom`                             |
-| Latitude        | `latitude`, `lat`                              |
-| Longitude       | `longitude`, `long`, `lon`, `lng`              |
-| Altitude        | `altitude`, `elevation`, `elev`, `z`           |
+| Latitude / Y    | `latitude`, `lat`, `y`                         |
+| Longitude / X   | `longitude`, `long`, `lon`, `lng`, `x`         |
+| Altitude / Z    | `altitude`, `elevation`, `elev`, `z`           |
 | Feature id      | `id`, `feature_id`, `feature_identifier`, `identifier`, `ident`, `fid`, `objectid`, `object_id`, `gid`, `idfield` |
 
 Any other column becomes a `Feature` property. Numeric properties are parsed as `Int` or `Double`, `true`/`false` as `Bool`, everything else stays a `String`. Only canonical integer spellings become `Int`, so leading-zero values such as `00123` stay strings. `NaN` and `Infinity` stay strings because they are not valid JSON numbers.
 
-If a row has a non-empty `geometry` column it is used as-is. The format is auto-detected, so it may be WKT (e.g. `POINT (11.5 48.1)` or `SRID=4326;LINESTRING (…)`), a hex-encoded PostGIS EWKB/WKB/TWKB string, or GeoJSON — and it may decode to a `Point`, `LineString`, `Polygon`, … All geometries are returned in EPSG:4326. If the geometry cell is empty or `NULL`, a latitude/longitude pair is used when available; if there is no pair either, the row becomes an unlocated feature. A row without a geometry column and without coordinate values is an error.
+If a row has a non-empty `geometry` column it is used as-is. The format is auto-detected, so it may be WKT (e.g. `POINT (11.5 48.1)` or `SRID=4326;LINESTRING (…)`), a hex-encoded PostGIS EWKB/WKB/TWKB string, or GeoJSON. WKT/WKB without an embedded SRID is interpreted in the selected `projection`; embedded SRIDs are honored, and GeoJSON geometry cells remain EPSG:4326. If the geometry cell is empty or `NULL`, a coordinate pair is used when available; if there is no pair either, the row becomes an unlocated feature. A row without a geometry column and without coordinate values is an error.
 
-Latitude and longitude must be finite and within -90…90 and -180…180 degrees. An invalid altitude is an error; an empty or `NULL` altitude becomes `nil`.
+For EPSG:4326, latitude and longitude must be finite and within -90…90 and -180…180 degrees. Other projections are validated against the projection's valid extent. An invalid altitude is an error; an empty or `NULL` altitude becomes `nil`.
 
 ### Column mapping (writing)
 
-For **all-point EPSG:4326** collections, the output uses `id`, `longitude`, `latitude`, `altitude`, then the remaining property columns:
+For **all-point** collections, the output uses the point layout. EPSG:4326 defaults to `id`, `longitude`, `latitude`, `altitude`; other projections default to `id`, `x`, `y`, `z`:
 
 ```
 id,longitude,latitude,altitude,name
 1,11.518585,48.135125,520,Marienplatz
+
+id,x,y,z,name
+1,1281000,6125000,,Munich
 ```
 
 Otherwise the geometry column is written **last** (it can be long), named `geometry` by default:
@@ -132,7 +149,7 @@ id,name,geometry
 
 Feature ids are always written to the `id` column (empty if a feature has none). Property columns are ordered deterministically: first appearance across features, alphabetically within one feature. Properties whose names collide with reserved column names (`id`, `geometry`, `lat`, `z`, …) are omitted, because the reader would misinterpret them. Whole-number `Double` properties keep a `.0` suffix so they read back as `Double`.
 
-Geometry written with `.wkt`, `.ewkb`, or `.geojson` is always reprojected to EPSG:4326. An unlocated feature is written as an empty geometry cell and can be read back.
+Geometry written with `.wkt` or `.ewkb` uses the output projection (the collection projection unless `CSVWriteOptions.projection` is set). `.geojson` output is always EPSG:4326, as required by the GeoJSON specification. An unlocated feature is written as an empty geometry cell and can be read back.
 
 ## API Reference
 
@@ -142,8 +159,9 @@ Geometry written with `.wkt`, `.ewkb`, or `.geojson` is always reprojected to EP
 | `CSVCoder.read(from data:options:)` | Reads CSV data into a `FeatureCollection` |
 | `CSVCoder.write(_:options:)` | Serializes a `FeatureCollection` to CSV `Data` |
 | `CSVCoder.write(_:to:options:)` | Writes a `FeatureCollection` to a CSV file |
-| `CSVReadOptions` | Options controlling CSV reading (`delimiter`, `nullHandling`, `treatAsLineString`) |
-| `CSVWriteOptions` | Options controlling CSV writing (`delimiter`, `geometryFormat`, `geometryColumnName`, `includeHeader`, `nullValue`, `lineEnding`) |
+| `CSVReadOptions` | Options controlling CSV reading (`delimiter`, `nullHandling`, `projection`, `treatAsLineString`) |
+| `CSVWriteOptions` | Options controlling CSV writing (`delimiter`, `projection`, `coordinateColumns`, `geometryFormat`, `geometryColumnName`, `includeHeader`, `nullValue`, `lineEnding`) |
+| `CSVCoordinateColumns` | Point-layout column naming: `.automatic`, `.longitudeLatitude`, or `.xy` |
 | `CSVError` | File, encoding, parsing, coordinate, and geometry errors |
 | `FeatureCollection(csv:options:)` | Convenience init from a CSV file (returns `nil` on failure) |
 | `FeatureCollection(csvData:options:)` | Convenience init from CSV data (returns `nil` on failure) |
@@ -181,7 +199,7 @@ CI runs tests on macOS and Linux, enforces at least 95% line coverage on Linux, 
 ## Limitations
 
 - A header row is required — geometry columns are never guessed.
-- CSV has no CRS. Latitude/longitude columns are always interpreted as EPSG:4326 degrees; geometry columns are reprojected to EPSG:4326.
+- CSV has no embedded CRS metadata. Coordinate columns default to EPSG:4326; projected data must set `CSVReadOptions.projection` (and optionally `CSVWriteOptions.projection`).
 - Feature and collection foreign members, collection metadata, and bounding boxes are not written.
 - Property names that collide with reserved column names are omitted on write.
 - Property types are inferred, so a string `"1"` reads back as an `Int`, and nested values are not reconstructed.

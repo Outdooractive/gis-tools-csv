@@ -43,6 +43,21 @@ if let collection = FeatureCollection(csv: csvURL) {
 }
 ```
 
+## Projected coordinates
+
+CSV has no embedded CRS. Set `projection` when the coordinate columns contain
+projected values:
+
+```swift
+let collection = try CSVCoder.read(
+    from: csvURL,
+    options: CSVReadOptions(projection: .epsg3857))
+```
+
+Writing a projected collection uses `x`/`y`/`z` columns by default. Use
+`CSVWriteOptions(projection:)` to reproject first, or
+`CSVWriteOptions(coordinateColumns:)` to force a naming style.
+
 ## Write a file
 
 ```swift

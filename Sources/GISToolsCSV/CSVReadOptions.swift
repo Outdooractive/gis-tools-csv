@@ -1,4 +1,5 @@
 import Foundation
+import GISTools
 
 // MARK: - Null handling
 
@@ -25,6 +26,13 @@ public struct CSVReadOptions: Sendable, Equatable, Hashable {
     /// How `NULL` and empty values are handled (default `.keepAsString`).
     public var nullHandling: CSVNullHandling
 
+    /// The projection of the CSV's coordinate values (default `.epsg4326`).
+    ///
+    /// CSV has no embedded CRS metadata. For projected data, the
+    /// longitude/latitude or x/y columns are interpreted as x/y in this
+    /// projection and are not validated against WGS84 ranges.
+    public var projection: Projection
+
     /// When enabled, the coordinates of all rows are concatenated (in row
     /// order) into a single `LineString` feature (default `false`).
     ///
@@ -41,14 +49,17 @@ public struct CSVReadOptions: Sendable, Equatable, Hashable {
     /// - Parameters:
     ///   - delimiter: The field delimiter (default `","`).
     ///   - nullHandling: How `NULL` and empty values are handled (default `.keepAsString`).
+    ///   - projection: The projection of the coordinate values (default `.epsg4326`).
     ///   - treatAsLineString: Concatenate all coordinates into a single `LineString` (default `false`).
     public init(
         delimiter: Character = CSVCoder.defaultDelimiter,
         nullHandling: CSVNullHandling = .keepAsString,
+        projection: Projection = .epsg4326,
         treatAsLineString: Bool = false,
     ) {
         self.delimiter = delimiter
         self.nullHandling = nullHandling
+        self.projection = projection
         self.treatAsLineString = treatAsLineString
     }
 

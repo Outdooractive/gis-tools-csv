@@ -9,12 +9,13 @@ Geometry is never guessed from column order. A header row must exist and must
 contain either a `geometry`/`geom` column or a latitude/longitude pair.
 Otherwise reading fails with ``CSVError/missingGeometryColumns``.
 
-## No projection information
+## No embedded CRS metadata
 
-CSV has no place for a CRS. Latitude/longitude columns are always interpreted
-as EPSG:4326 degrees. Geometry columns may carry an SRID in WKT or EWKB, and
-the reader reprojects them to EPSG:4326. There is no read option to request a
-different target projection.
+CSV has no place for a CRS. Coordinate columns default to EPSG:4326; projected
+data must set ``CSVReadOptions/projection``. WKT/WKB geometry cells may carry
+an SRID, while GeoJSON geometry cells are always EPSG:4326. Writing a projected
+collection uses x/y/z columns by default, and `CSVWriteOptions/projection` can
+reproject first if a different output CRS is required.
 
 ## Metadata is lost
 
@@ -24,9 +25,10 @@ bounding boxes. Feature and collection foreign members are not written.
 ## Property names are restricted
 
 The reader recognizes role columns by name. A property named `id`, `geometry`,
-`lat`, `lon`, `z`, or any other reserved alias cannot be represented, because
-writing it would create a column the reader treats as a role. The writer
-omits such properties. Rename them before writing if the data matters.
+`lat`, `lon`, `x`, `y`, `z`, or any other reserved alias cannot be represented
+when that layout is active, because writing it would create a column the reader
+treats as a role. The writer omits such properties. Rename them before writing
+if the data matters.
 
 Property names are matched case-insensitively on write; the first spelling
 wins. Two properties that differ only in case are therefore collapsed. If a
