@@ -1,0 +1,63 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+## Unreleased
+
+### Breaking changes
+
+- Updated to `gis-tools` `3.0.0-beta.5`. `Feature.geometry` is optional in
+  that release, and unlocated features are now supported throughout the
+  reader and writer.
+- A header without a geometry column and without a latitude/longitude pair now
+  throws `CSVError.missingGeometryColumns` instead of `CSVError.missingHeader`.
+- An unterminated quoted field now throws `CSVError.malformedCSV` instead of
+  silently swallowing the rest of the file.
+- Latitude and longitude values are validated as finite EPSG:4326 coordinates
+  (-90…90 and -180…180). An invalid altitude now throws instead of being
+  silently ignored.
+- Writing omits properties whose names collide with reserved column names
+  (`id`, `geometry`, `geom`, `lat`, `lon`, `lng`, `z`, `fid`, …) instead of
+  producing duplicate columns that the reader misinterprets.
+- Numeric inference only converts canonical integers. Leading-zero values such
+  as `00123` and values such as `+1` stay strings. `NaN` and `Infinity` stay
+  strings.
+- `Double` properties and ids are written with a `.0` suffix for whole numbers
+  and with the shortest round-trip representation, so they read back as
+  `Double` instead of `Int`.
+- `.auto` only uses the longitude/latitude layout for EPSG:4326 points. Points
+  in other projections use the geometry layout.
+- `.geojson` output reprojects geometry to EPSG:4326.
+- The `CSVError` descriptions for parsed geometry errors no longer contain a
+  duplicated `Invalid geometry:` prefix.
+
+### Added
+
+- `lon` as a longitude column alias.
+- `CSVError.malformedCSV(detail:)`, `CSVError.missingGeometryColumns`, and
+  `CSVError.invalidGeometryColumnName(name:)`.
+- `Equatable` and `Hashable` conformances for `CSVReadOptions`,
+  `CSVWriteOptions`, `CSVNullHandling`, `CSVGeometryFormat`, and
+  `CSVLineEnding`.
+- Reading an empty geometry cell as an unlocated feature when no coordinate
+  pair is available. Writing an unlocated feature as an empty geometry cell.
+- DocC catalog with getting started, reading, writing, and limitations
+  articles.
+- `scripts/build-documentation.sh` and `scripts/coverage.sh`.
+- Linux CI with coverage and documentation checks; macOS CI retains the test
+  run.
+
+### Fixed
+
+- UTF-8 byte order marks no longer break header detection.
+- A quote inside an unquoted field is preserved instead of dropped.
+- Duplicate `id` columns when a feature has a property named `id`.
+- Nondeterministic property column order caused by dictionary iteration.
+- `FeatureCollection.writeCSV(to:)` now wraps file system errors in
+  `CSVError.fileWriteError`, matching `CSVCoder.write(_:to:options:)`.
+- Writing an empty collection with `includeHeader: false` now produces empty
+  data instead of a single newline.
+- Double precision loss from the previous `%.9g` formatting.
+- Id overflow on 32-bit platforms and non-finite `Double` ids.
+- Semicolon delimiter test data with a trailing newline.
+- The `.spi.yml` documentation target now points at `GISToolsCSV`.

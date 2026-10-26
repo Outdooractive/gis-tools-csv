@@ -3,10 +3,11 @@ import Foundation
 // MARK: - Geometry format
 
 /// How geometry is written to the CSV geometry column.
-public enum CSVGeometryFormat: Sendable {
+public enum CSVGeometryFormat: Sendable, Equatable, Hashable {
 
-    /// The default behavior: all-points collections use `longitude`/`latitude`/
-    /// `altitude` columns, otherwise a WKT geometry column is emitted.
+    /// The default behavior: all-points collections in EPSG:4326 use
+    /// `longitude`/`latitude`/`altitude` columns, otherwise a WKT geometry
+    /// column is emitted.
     case auto
 
     /// Always emit a geometry column containing WKT (SRID-prefixed).
@@ -23,7 +24,7 @@ public enum CSVGeometryFormat: Sendable {
 // MARK: - Line ending
 
 /// The line ending used when writing CSV.
-public enum CSVLineEnding: Sendable {
+public enum CSVLineEnding: Sendable, Equatable, Hashable {
 
     /// `\n` (Unix/macOS).
     case lf
@@ -34,8 +35,8 @@ public enum CSVLineEnding: Sendable {
     /// The raw line ending string.
     public var rawValue: String {
         switch self {
-        case .lf: return "\n"
-        case .crlf: return "\r\n"
+        case .lf: "\n"
+        case .crlf: "\r\n"
         }
     }
 
@@ -43,8 +44,8 @@ public enum CSVLineEnding: Sendable {
 
 // MARK: - Write options
 
-/// Options that control how a ``FeatureCollection`` is written to CSV.
-public struct CSVWriteOptions: Sendable {
+/// Options that control how a `FeatureCollection` is written to CSV.
+public struct CSVWriteOptions: Sendable, Equatable, Hashable {
 
     /// The field delimiter (default `","`).
     public var delimiter: Character
@@ -79,7 +80,7 @@ public struct CSVWriteOptions: Sendable {
         geometryColumnName: String = "geometry",
         includeHeader: Bool = true,
         nullValue: String = "",
-        lineEnding: CSVLineEnding = .lf
+        lineEnding: CSVLineEnding = .lf,
     ) {
         self.delimiter = delimiter
         self.geometryFormat = geometryFormat
