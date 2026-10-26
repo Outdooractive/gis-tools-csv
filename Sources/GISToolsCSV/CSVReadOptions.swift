@@ -3,8 +3,8 @@ import Foundation
 // MARK: - Null handling
 
 /// How `NULL` (and empty) values in a CSV are treated when building
-/// ``Feature`` properties.
-public enum CSVNullHandling: Sendable {
+/// `Feature` properties.
+public enum CSVNullHandling: Sendable, Equatable, Hashable {
 
     /// Keep the raw value as a string (e.g. `"NULL"` stays a `String`).
     case keepAsString
@@ -16,8 +16,8 @@ public enum CSVNullHandling: Sendable {
 
 // MARK: - Read options
 
-/// Options that control how a CSV is read into a ``FeatureCollection``.
-public struct CSVReadOptions: Sendable {
+/// Options that control how a CSV is read into a `FeatureCollection`.
+public struct CSVReadOptions: Sendable, Equatable, Hashable {
 
     /// The field delimiter (default `","`).
     public var delimiter: Character
@@ -45,7 +45,7 @@ public struct CSVReadOptions: Sendable {
     public init(
         delimiter: Character = CSVCoder.defaultDelimiter,
         nullHandling: CSVNullHandling = .keepAsString,
-        treatAsLineString: Bool = false
+        treatAsLineString: Bool = false,
     ) {
         self.delimiter = delimiter
         self.nullHandling = nullHandling

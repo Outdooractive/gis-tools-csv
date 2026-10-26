@@ -2,9 +2,10 @@ import Foundation
 
 // MARK: - Column roles
 
-/// The role a CSV column plays in building a ``Feature``.
+/// The role a CSV column plays in building a `Feature`.
 enum CSVColumnRole: Equatable {
-    /// A `geometry`/`geom` column containing WKT.
+
+    /// A `geometry`/`geom` column containing a serialized geometry.
     case geometry
     /// A latitude column.
     case latitude
@@ -16,6 +17,7 @@ enum CSVColumnRole: Equatable {
     case id
     /// A plain property column.
     case property
+
 }
 
 // MARK: - Column mapping
@@ -25,6 +27,57 @@ enum CSVColumnRole: Equatable {
 /// Column names are matched case-insensitively, so `FEATURE_IDENTIFIER` and
 /// `feature_identifier` are treated the same.
 struct CSVColumnMapping {
+
+    /// The header names accepted as a geometry column.
+    static let geometryAliases: Set<String> = ["geometry", "geom"]
+
+    /// The header names accepted as a latitude column.
+    static let latitudeAliases: Set<String> = ["latitude", "lat"]
+
+    /// The header names accepted as a longitude column.
+    static let longitudeAliases: Set<String> = ["longitude", "long", "lon", "lng"]
+
+    /// The header names accepted as an altitude column.
+    static let altitudeAliases: Set<String> = ["altitude", "elevation", "elev", "z"]
+
+    /// The set of normalized header names accepted as an id column.
+    ///
+    /// The canonical column `id` wins; a range of common variants
+    /// (`feature_id`, `feature_identifier`, `identifier`, `fid`, …) are
+    /// also accepted. All are matched case-insensitively.
+    static let idAliases: Set<String> = [
+        "id",
+        "feature_id",
+        "featureid",
+        "feature_identifier",
+        "featureidentifier",
+        "identifier",
+        "ident",
+        "fid",
+        "objectid",
+        "object_id",
+        "gid",
+        "idfield",
+    ]
+
+    /// Every header name that is interpreted as a role instead of a property.
+    ///
+    /// The writer uses this set to avoid creating property columns that the
+    /// reader would misinterpret.
+    static let allReservedNames: Set<String> = geometryAliases
+        .union(latitudeAliases)
+        .union(longitudeAliases)
+        .union(altitudeAliases)
+        .union(idAliases)
+
+    /// Header names that must not be used for the geometry column itself.
+    ///
+    /// A custom geometry column may be named `geometry`/`geom`, but naming it
+    /// after a coordinate or id column would make the output unreadable.
+    static let nonGeometryReservedNames: Set<String> = latitudeAliases
+        .union(longitudeAliases)
+        .union(altitudeAliases)
+        .union(idAliases)
 
     /// The detected role for each header column (aligned with `headers`).
     let roles: [CSVColumnRole]
@@ -52,19 +105,6 @@ struct CSVColumnMapping {
         geometryIndex != nil || (latitudeIndex != nil && longitudeIndex != nil)
     }
 
-    /// The set of normalized header names accepted as an id column.
-    ///
-    /// The canonical column `id` wins; a range of common variants
-    /// (`feature_id`, `feature_identifier`, `identifier`, `fid`, …) are
-    /// also accepted. All are matched case-insensitively.
-    private static let idAliases: Set<String> = [
-        "id",
-        "feature_id", "featureid",
-        "feature_identifier", "featureidentifier",
-        "identifier", "ident",
-        "fid", "objectid", "object_id", "gid", "idfield",
-    ]
-
     /// Builds a mapping from a header row.
     ///
     /// - Parameter headers: The header column names, in order.
@@ -77,28 +117,30 @@ struct CSVColumnMapping {
         var idIndex: Int? = nil
 
         for (index, header) in headers.enumerated() {
-            let normalized = header.trimmingCharacters(in: .whitespaces).lowercased()
-            switch normalized {
-            case "geometry", "geom":
+            let normalized = header.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+            if Self.geometryAliases.contains(normalized) {
                 roles.append(.geometry)
                 geometryIndex = index
-            case "latitude", "lat":
+            }
+            else if Self.latitudeAliases.contains(normalized) {
                 roles.append(.latitude)
                 latitudeIndex = index
-            case "longitude", "long", "lng":
+            }
+            else if Self.longitudeAliases.contains(normalized) {
                 roles.append(.longitude)
                 longitudeIndex = index
-            case "altitude", "elevation", "elev", "z":
+            }
+            else if Self.altitudeAliases.contains(normalized) {
                 roles.append(.altitude)
                 altitudeIndex = index
-            default:
-                if Self.idAliases.contains(normalized) {
-                    roles.append(.id)
-                    idIndex = index
-                }
-                else {
-                    roles.append(.property)
-                }
+            }
+            else if Self.idAliases.contains(normalized) {
+                roles.append(.id)
+                idIndex = index
+            }
+            else {
+                roles.append(.property)
             }
         }
 

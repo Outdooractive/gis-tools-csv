@@ -54,6 +54,15 @@ struct CSVFormatTests {
         #expect(fc.features[0].properties["name"] as? String == "Munich, Bavaria; note")
     }
 
+    @Test
+    func readSemicolonFileWithTrailingNewline() throws {
+        let fc = try CSVCoder.read(
+            from: dataURL.appendingPathComponent("empty_trailing_newline.csv"),
+            options: CSVReadOptions(delimiter: ";"))
+        #expect(fc.features.count == 1)
+        #expect(fc.features[0].properties["name"] as? String == "Munich, Bavaria")
+    }
+
     // MARK: - Quoting edge cases
 
     @Test
@@ -63,7 +72,8 @@ struct CSVFormatTests {
         #expect(fc.features.count == 3)
         #expect(
             fc.features[0].properties["name"] as? String ==
-            "escaped \"quote\" inside")
+                "escaped \"quote\" inside",
+        )
     }
 
     @Test
@@ -73,7 +83,8 @@ struct CSVFormatTests {
         // Whitespace inside quotes is preserved.
         #expect(
             fc.features[1].properties["name"] as? String ==
-            "trailing spaces   ")
+                "trailing spaces   ",
+        )
     }
 
     @Test
@@ -83,6 +94,26 @@ struct CSVFormatTests {
         // The "line\nbreak" field swallows the newline but stays one record.
         #expect(fc.features.count == 3)
         #expect(fc.features[2].properties["name"] as? String == "line\nbreak")
+    }
+
+    @Test
+    func readQuoteInsideUnquotedFieldIsData() throws {
+        let data = Data("""
+        latitude,longitude,name
+        48.1,11.5,a"b
+        """.utf8)
+        let fc = try CSVCoder.read(from: data)
+        #expect(fc.features[0].properties["name"] as? String == "a\"b")
+    }
+
+    @Test
+    func readEmptyQuotedValue() throws {
+        let data = Data("""
+        latitude,longitude,name
+        48.1,11.5,""
+        """.utf8)
+        let fc = try CSVCoder.read(from: data)
+        #expect(fc.features[0].properties["name"] as? String == "")
     }
 
     // MARK: - Blank lines & ragged rows
@@ -108,6 +139,35 @@ struct CSVFormatTests {
         #expect(fc.features[2].properties["name"] == nil)
     }
 
+    @Test
+    func readRowWithOnlyEmptyValuesIsAnError() {
+        // A line containing delimiters is a record, not a blank line. It has
+        // no geometry, so it must not be skipped silently.
+        let data = Data("""
+        id,latitude,longitude
+        1,48.1,11.5
+        ,,
+        2,48.2,11.6
+        """.utf8)
+        #expect(throws: CSVError.invalidCoordinate(detail: "row 3: invalid latitude")) {
+            _ = try CSVCoder.read(from: data)
+        }
+    }
+
+    @Test
+    func readTrulyBlankLinesAreSkipped() throws {
+        let data = Data("""
+        id,latitude,longitude
+        1,48.1,11.5
+
+
+        2,48.2,11.6
+        """.utf8)
+        let fc = try CSVCoder.read(from: data)
+        #expect(fc.features.count == 2)
+        #expect(fc.features[1].id == .int(2))
+    }
+
     // MARK: - Line endings
 
     @Test
@@ -117,6 +177,13 @@ struct CSVFormatTests {
         #expect(fc.features.count == 2)
         #expect(fc.features[0].id == .int(1))
         #expect(fc.features[1].properties["name"] as? String == "Reichstag")
+    }
+
+    @Test
+    func readCROnlyLineEndings() throws {
+        let data = Data("id,latitude,longitude\r1,48.1,11.5\r2,48.2,11.6\r".utf8)
+        let fc = try CSVCoder.read(from: data)
+        #expect(fc.features.count == 2)
     }
 
     @Test
@@ -130,24 +197,22 @@ struct CSVFormatTests {
     // MARK: - Broken CSV
 
     @Test
-    func readUnbalancedQuote() throws {
-        // The whole remainder becomes one giant quoted field; it must still
-        // not crash and should yield a geometry-less, malformed record set.
-        // We assert it does not throw and that no error occurs.
-        #expect(throws: Never.self) {
+    func readUnbalancedQuoteThrows() {
+        #expect(throws: CSVError.malformedCSV(detail: "row 2: unterminated quoted field")) {
             _ = try CSVCoder.read(
                 from: dataURL.appendingPathComponent("broken_unbalanced_quotes.csv"))
         }
     }
 
     @Test
-    func readQuoteSwallowsLines() throws {
+    func readQuoteSwallowsLinesThrows() {
         // A quote opens in the name field of row 1 and swallows the following
-        // lines as a single field — records get merged.
-        let fc = try CSVCoder.read(
-            from: dataURL.appendingPathComponent("broken_quote_swallows_line.csv"))
-        // Should not crash; at least one row is produced.
-        #expect(fc.features.count >= 1)
+        // lines. Silently merging records would corrupt the data, so this is
+        // reported as an error.
+        #expect(throws: CSVError.malformedCSV(detail: "row 2: unterminated quoted field")) {
+            _ = try CSVCoder.read(
+                from: dataURL.appendingPathComponent("broken_quote_swallows_line.csv"))
+        }
     }
 
 }
