@@ -1,4 +1,5 @@
 import Foundation
+import GISTools
 
 // MARK: - Geometry format
 
@@ -18,6 +19,22 @@ public enum CSVGeometryFormat: Sendable, Equatable, Hashable {
 
     /// Always emit a geometry column containing a GeoJSON string.
     case geojson
+
+}
+
+// MARK: - Coordinate columns
+
+/// The column names used for the point-coordinate layout.
+public enum CSVCoordinateColumns: Sendable, Equatable, Hashable {
+
+    /// `longitude`/`latitude`/`altitude` for EPSG:4326, otherwise `x`/`y`/`z`.
+    case automatic
+
+    /// Always use `longitude`/`latitude`/`altitude`.
+    case longitudeLatitude
+
+    /// Always use `x`/`y`/`z`.
+    case xy
 
 }
 
@@ -50,6 +67,19 @@ public struct CSVWriteOptions: Sendable, Equatable, Hashable {
     /// The field delimiter (default `","`).
     public var delimiter: Character
 
+    /// The projection to write coordinates in. When `nil`, the feature
+    /// collection's projection is used.
+    public var projection: Projection?
+
+    /// The point-coordinate column names (default `.automatic`).
+    public var coordinateColumns: CSVCoordinateColumns
+
+    /// An optional CRS column name (`projection`, `crs`, or `srid`).
+    ///
+    /// When set, every row receives a CRS value for the output projection.
+    /// A `nil` value writes no CRS column.
+    public var projectionColumnName: String?
+
     /// How geometry is written (default `.auto`).
     public var geometryFormat: CSVGeometryFormat
 
@@ -69,6 +99,9 @@ public struct CSVWriteOptions: Sendable, Equatable, Hashable {
     ///
     /// - Parameters:
     ///   - delimiter: The field delimiter (default `","`).
+    ///   - projection: The output projection, or `nil` for the collection projection.
+    ///   - coordinateColumns: The point-coordinate column names (default `.automatic`).
+    ///   - projectionColumnName: An optional CRS column name (`projection`, `crs`, or `srid`).
     ///   - geometryFormat: How geometry is written (default `.auto`).
     ///   - geometryColumnName: The name of the geometry column (default `"geometry"`).
     ///   - includeHeader: Whether to write the header row (default `true`).
@@ -76,6 +109,9 @@ public struct CSVWriteOptions: Sendable, Equatable, Hashable {
     ///   - lineEnding: The line ending used between rows (default `.lf`).
     public init(
         delimiter: Character = CSVCoder.defaultDelimiter,
+        projection: Projection? = nil,
+        coordinateColumns: CSVCoordinateColumns = .automatic,
+        projectionColumnName: String? = nil,
         geometryFormat: CSVGeometryFormat = .auto,
         geometryColumnName: String = "geometry",
         includeHeader: Bool = true,
@@ -83,6 +119,9 @@ public struct CSVWriteOptions: Sendable, Equatable, Hashable {
         lineEnding: CSVLineEnding = .lf,
     ) {
         self.delimiter = delimiter
+        self.projection = projection
+        self.coordinateColumns = coordinateColumns
+        self.projectionColumnName = projectionColumnName
         self.geometryFormat = geometryFormat
         self.geometryColumnName = geometryColumnName
         self.includeHeader = includeHeader

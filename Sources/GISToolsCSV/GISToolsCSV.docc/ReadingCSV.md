@@ -8,14 +8,17 @@ have surrounding whitespace. The following roles are recognized:
 | Role | Accepted column names |
 |---|---|
 | Geometry | `geometry`, `geom` |
-| Latitude | `latitude`, `lat` |
-| Longitude | `longitude`, `long`, `lon`, `lng` |
-| Altitude | `altitude`, `elevation`, `elev`, `z` |
+| Latitude / Y | `latitude`, `lat`, `y` |
+| Longitude / X | `longitude`, `long`, `lon`, `lng`, `x` |
+| Altitude / Z | `altitude`, `elevation`, `elev`, `z` |
+| CRS / projection | `projection`, `crs`, `srid` |
 | Feature id | `id`, `feature_id`, `feature_identifier`, `identifier`, `ident`, `fid`, `objectid`, `object_id`, `gid`, `idfield` |
 
-Every other column becomes a `Feature` property. If the header contains no
-geometry column and no latitude/longitude pair, reading fails with
-``CSVError/missingGeometryColumns``.
+Every other column becomes a `Feature` property. `x`/`y` are used as
+coordinate aliases only when neither a longitude nor a latitude alias is
+present; this keeps a file containing both `longitude` and an `x` property
+unambiguous. If the header contains no geometry column and no coordinate pair,
+reading fails with ``CSVError/missingGeometryColumns``.
 
 ## Geometry detection
 
@@ -26,8 +29,9 @@ A non-empty geometry cell is auto-detected as one of:
 - Hex-encoded WKB, EWKB, or TWKB, such as the output of PostGIS
 - A GeoJSON geometry object
 
-All geometries are returned in EPSG:4326. Other projections are reprojected
-by `GISTools`.
+WKT/WKB values without an embedded SRID are interpreted in
+``CSVReadOptions/projection``. Embedded SRIDs are honored, and GeoJSON geometry
+cells remain EPSG:4326. The returned geometry uses the selected projection.
 
 If the geometry cell is empty or `NULL`, a latitude/longitude pair is used when
 available. If there is no pair either, the row becomes an unlocated feature
@@ -36,8 +40,15 @@ available. If there is no pair either, the row becomes an unlocated feature
 If both a geometry column and coordinate columns exist, the geometry column
 wins whenever it is non-empty.
 
-Latitude and longitude values must be finite and within -90…90 and -180…180
-degrees. The altitude is optional; an empty or `NULL` altitude becomes `nil`.
+For EPSG:4326, coordinate values must be finite and within -90…90 and
+-180…180 degrees. Other projections use the projection's valid extent. The
+altitude is optional; an empty or `NULL` altitude becomes `nil`.
+
+A `projection`, `crs`, or `srid` column overrides
+``CSVReadOptions/projection`` for the whole file. Non-empty values must all
+resolve to the same projection; empty cells use the option fallback. Values may
+be plain SRIDs, `EPSG:n`, `urn:ogc:def:crs:EPSG::n`, `SRID=n`, `noSRID`/`none`,
+or recognized WKT.
 
 ## Options
 
@@ -47,6 +58,7 @@ degrees. The altitude is optional; an empty or `NULL` altitude becomes `nil`.
 |---|---|---|
 | ``CSVReadOptions/delimiter`` | `","` | The field delimiter. Any single `Character` is accepted, including multi-scalar graphemes. |
 | ``CSVReadOptions/nullHandling`` | `.keepAsString` | How `NULL` and empty property values are handled. |
+| ``CSVReadOptions/projection`` | `.epsg4326` | CRS of the coordinate values and unlabelled geometry cells. |
 | ``CSVReadOptions/treatAsLineString`` | `false` | Concatenate all coordinates into one `LineString`. |
 
 ### Null handling

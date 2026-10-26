@@ -15,6 +15,8 @@ enum CSVColumnRole: Equatable {
     case altitude
     /// A column used for the Feature id.
     case id
+    /// A column containing a CRS/projection identifier.
+    case projection
     /// A plain property column.
     case property
 
@@ -37,8 +39,16 @@ struct CSVColumnMapping {
     /// The header names accepted as a longitude column.
     static let longitudeAliases: Set<String> = ["longitude", "long", "lon", "lng"]
 
+    /// The header names accepted as x/y coordinate aliases when no
+    /// longitude/latitude columns are present.
+    static let xAliases: Set<String> = ["x"]
+    static let yAliases: Set<String> = ["y"]
+
     /// The header names accepted as an altitude column.
     static let altitudeAliases: Set<String> = ["altitude", "elevation", "elev", "z"]
+
+    /// Header names accepted as a CRS/projection column.
+    static let projectionAliases: Set<String> = ["projection", "crs", "srid"]
 
     /// The set of normalized header names accepted as an id column.
     ///
@@ -68,6 +78,8 @@ struct CSVColumnMapping {
         .union(latitudeAliases)
         .union(longitudeAliases)
         .union(altitudeAliases)
+        .union(xAliases)
+        .union(yAliases)
         .union(idAliases)
 
     /// Header names that must not be used for the geometry column itself.
@@ -77,6 +89,8 @@ struct CSVColumnMapping {
     static let nonGeometryReservedNames: Set<String> = latitudeAliases
         .union(longitudeAliases)
         .union(altitudeAliases)
+        .union(xAliases)
+        .union(yAliases)
         .union(idAliases)
 
     /// The detected role for each header column (aligned with `headers`).
@@ -100,6 +114,9 @@ struct CSVColumnMapping {
     /// The 0-based index of the id column, if any.
     let idIndex: Int?
 
+    /// The 0-based index of the CRS/projection column, if any.
+    let projectionIndex: Int?
+
     /// Whether any geometry-bearing column (geometry or a lat/lon pair) exists.
     var hasGeometrySource: Bool {
         geometryIndex != nil || (latitudeIndex != nil && longitudeIndex != nil)
@@ -109,31 +126,53 @@ struct CSVColumnMapping {
     ///
     /// - Parameter headers: The header column names, in order.
     init(headers: [String]) {
-        var roles: [CSVColumnRole] = []
+        let normalizedHeaders = headers.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+
         var geometryIndex: Int? = nil
-        var latitudeIndex: Int? = nil
-        var longitudeIndex: Int? = nil
         var altitudeIndex: Int? = nil
         var idIndex: Int? = nil
+        var projectionIndex: Int? = nil
 
-        for (index, header) in headers.enumerated() {
-            let normalized = header.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // Prefer the canonical longitude/latitude names. Fall back to x/y
+        // only when neither canonical coordinate column is present, so a
+        // CSV containing both `longitude` and an `x` property remains
+        // unambiguous.
+        var latitudeIndex = normalizedHeaders.firstIndex {
+            Self.latitudeAliases.contains($0)
+        }
+        var longitudeIndex = normalizedHeaders.firstIndex {
+            Self.longitudeAliases.contains($0)
+        }
+        if latitudeIndex == nil, longitudeIndex == nil {
+            latitudeIndex = normalizedHeaders.firstIndex {
+                Self.yAliases.contains($0)
+            }
+            longitudeIndex = normalizedHeaders.firstIndex {
+                Self.xAliases.contains($0)
+            }
+        }
 
+        var roles: [CSVColumnRole] = []
+        for (index, normalized) in normalizedHeaders.enumerated() {
             if Self.geometryAliases.contains(normalized) {
                 roles.append(.geometry)
                 geometryIndex = index
             }
-            else if Self.latitudeAliases.contains(normalized) {
+            else if index == latitudeIndex {
                 roles.append(.latitude)
-                latitudeIndex = index
             }
-            else if Self.longitudeAliases.contains(normalized) {
+            else if index == longitudeIndex {
                 roles.append(.longitude)
-                longitudeIndex = index
             }
             else if Self.altitudeAliases.contains(normalized) {
                 roles.append(.altitude)
                 altitudeIndex = index
+            }
+            else if Self.projectionAliases.contains(normalized) {
+                roles.append(.projection)
+                projectionIndex = index
             }
             else if Self.idAliases.contains(normalized) {
                 roles.append(.id)
@@ -151,6 +190,7 @@ struct CSVColumnMapping {
         self.longitudeIndex = longitudeIndex
         self.altitudeIndex = altitudeIndex
         self.idIndex = idIndex
+        self.projectionIndex = projectionIndex
     }
 
 }

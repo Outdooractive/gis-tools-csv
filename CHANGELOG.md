@@ -25,15 +25,26 @@ All notable changes to this project are documented in this file.
 - `Double` properties and ids are written with a `.0` suffix for whole numbers
   and with the shortest round-trip representation, so they read back as
   `Double` instead of `Int`.
-- `.auto` only uses the longitude/latitude layout for EPSG:4326 points. Points
-  in other projections use the geometry layout.
-- `.geojson` output reprojects geometry to EPSG:4326.
+- `.auto` now uses the point layout for all-point collections in any
+  projection. EPSG:4326 keeps longitude/latitude/altitude names; other
+  projections use x/y/z by default.
+- CSV output uses the collection's projection by default. Existing projected
+  collections that relied on implicit reprojection to EPSG:4326 must set
+  `CSVWriteOptions(projection: .epsg4326)`.
+- `.geojson` output still reprojects geometry to EPSG:4326.
 - The `CSVError` descriptions for parsed geometry errors no longer contain a
   duplicated `Invalid geometry:` prefix.
 
 ### Added
 
 - `lon` as a longitude column alias.
+- `CSVReadOptions.projection` and `CSVWriteOptions.projection` for arbitrary
+  registered projections.
+- `x`/`y` coordinate column aliases and `CSVCoordinateColumns` for selecting
+  longitude/latitude or x/y point layouts.
+- `projection`/`crs`/`srid` CSV columns with consistent file-level CRS
+  handling, plus `CSVWriteOptions.projectionColumnName` for writing a CRS
+  column.
 - `CSVError.malformedCSV(detail:)`, `CSVError.missingGeometryColumns`, and
   `CSVError.invalidGeometryColumnName(name:)`.
 - `Equatable` and `Hashable` conformances for `CSVReadOptions`,

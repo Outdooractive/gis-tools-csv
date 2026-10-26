@@ -8,20 +8,26 @@ The writer has two layouts, controlled by
 ### Point layout
 
 When the geometry format is ``CSVGeometryFormat/auto`` and every feature is a
-simple `Point` in EPSG:4326, the output is:
+simple `Point`, the output uses a point layout. EPSG:4326 defaults to:
 
 ```
 id,longitude,latitude,altitude,<properties>
 ```
 
-The altitude cell is empty when the coordinate has no altitude (or uses
-``CSVWriteOptions/nullValue``). Points in other projections use the geometry
-layout instead, so their coordinates are not misread as degrees.
+Other projections default to:
+
+```
+id,x,y,z,<properties>
+```
+
+``CSVWriteOptions/coordinateColumns`` can force `.longitudeLatitude` or `.xy`
+for either case. The altitude cell is empty when the coordinate has no altitude
+(or uses ``CSVWriteOptions/nullValue``).
 
 ### Geometry layout
 
-When at least one feature is not an EPSG:4326 point, or when an explicit
-geometry format is requested, the output is:
+When at least one feature is not a point, or when an explicit geometry format
+is requested, the output is:
 
 ```
 id,<properties>,geometry
@@ -38,6 +44,9 @@ feature.
 | Option | Default | Description |
 |---|---|---|
 | ``CSVWriteOptions/delimiter`` | `","` | The field delimiter. |
+| ``CSVWriteOptions/projection`` | `nil` | Output projection. `nil` preserves the collection projection. |
+| ``CSVWriteOptions/coordinateColumns`` | `.automatic` | Point-layout names: longitude/latitude/altitude for 4326, x/y/z otherwise. |
+| ``CSVWriteOptions/projectionColumnName`` | `nil` | Optional `projection`/`crs`/`srid` column with the output CRS in every row. |
 | ``CSVWriteOptions/geometryFormat`` | `.auto` | How geometry is written. |
 | ``CSVWriteOptions/geometryColumnName`` | `"geometry"` | The geometry column name. It must not be empty or collide with a coordinate or id column. |
 | ``CSVWriteOptions/includeHeader`` | `true` | Whether to write the header row. |
@@ -48,14 +57,16 @@ feature.
 
 | Format | Output |
 |---|---|
-| ``CSVGeometryFormat/auto`` | Point layout for EPSG:4326 points, WKT otherwise. |
-| ``CSVGeometryFormat/wkt`` | WKT with an `SRID=4326;` prefix. |
-| ``CSVGeometryFormat/ewkb`` | Uppercase hex-encoded EWKB. |
-| ``CSVGeometryFormat/geojson`` | A compact GeoJSON geometry object. |
+| ``CSVGeometryFormat/auto`` | Point layout for all-point collections, WKT otherwise. |
+| ``CSVGeometryFormat/wkt`` | WKT in the output projection, with an SRID prefix. |
+| ``CSVGeometryFormat/ewkb`` | Uppercase hex-encoded EWKB in the output projection. |
+| ``CSVGeometryFormat/geojson`` | A compact GeoJSON geometry object in EPSG:4326. |
 
-WKT, EWKB, and GeoJSON output is always reprojected to EPSG:4326, which is
-the only projection GeoJSON can represent. Reading it back therefore also
-yields EPSG:4326.
+WKT and EWKB output uses the output projection (the collection projection
+unless ``CSVWriteOptions/projection`` is set). GeoJSON output is always
+EPSG:4326, as required by the GeoJSON specification. Use
+``CSVWriteOptions/projectionColumnName`` to emit a CRS column explicitly; the
+value is `EPSG:<srid>` or `noSRID`.
 
 ## Property columns
 
@@ -67,7 +78,8 @@ case-insensitively; the first spelling encountered wins.
 Properties whose names collide with reserved column names are omitted, because
 the reader would misinterpret them. This includes `id` and the id aliases,
 `geometry`/`geom`, latitude/longitude aliases, and altitude aliases (`z`,
-`elev`, …).
+`elev`, …). When the point layout uses `x`/`y` columns, properties named `x`
+and `y` are also omitted.
 
 Whole-number `Double` properties keep a `.0` suffix so they read back as
 `Double` instead of `Int`. Values use Swift's shortest round-trip

@@ -46,6 +46,10 @@ public enum CSVError: LocalizedError, Equatable {
     /// - Parameter name: The invalid column name.
     case invalidGeometryColumnName(name: String)
 
+    /// A CRS/projection column contains an unknown or inconsistent value.
+    /// - Parameter detail: A description of the problem.
+    case invalidProjection(detail: String)
+
     /// A human-readable description of the error.
     public var errorDescription: String? {
         switch self {
@@ -69,6 +73,8 @@ public enum CSVError: LocalizedError, Equatable {
             "Invalid geometry: \(detail)"
         case let .invalidGeometryColumnName(name):
             "Invalid geometry column name '\(name)'. It must not be empty or collide with a coordinate or id column."
+        case let .invalidProjection(detail):
+            "Invalid projection: \(detail)"
         }
     }
 

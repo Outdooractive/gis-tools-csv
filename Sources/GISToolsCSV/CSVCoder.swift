@@ -80,6 +80,7 @@ public enum CSVCoder {
         return try convertToFeatureCollection(
             rows: rows,
             nullHandling: options.nullHandling,
+            projection: options.projection,
             treatAsLineString: options.treatAsLineString)
     }
 
@@ -133,6 +134,7 @@ public enum CSVCoder {
     private static func convertToFeatureCollection(
         rows: [[String]],
         nullHandling: CSVNullHandling,
+        projection: Projection,
         treatAsLineString: Bool = false,
     ) throws -> FeatureCollection {
         guard let headerRow = rows.first, headerRow.isNotEmpty else {
@@ -144,6 +146,11 @@ public enum CSVCoder {
             throw CSVError.missingGeometryColumns
         }
 
+        let projection = try resolvedProjection(
+            rows: rows,
+            mapping: mapping,
+            fallback: projection)
+
         var features: [Feature] = []
         var lineNumbers: [Int] = []
         for (lineIndex, row) in rows.dropFirst().enumerated() {
@@ -153,7 +160,12 @@ public enum CSVCoder {
                 continue
             }
             try features.append(
-                feature(from: row, mapping: mapping, line: lineIndex + 2, nullHandling: nullHandling))
+                feature(
+                    from: row,
+                    mapping: mapping,
+                    line: lineIndex + 2,
+                    nullHandling: nullHandling,
+                    projection: projection))
             lineNumbers.append(lineIndex + 2)
         }
 
@@ -217,6 +229,7 @@ public enum CSVCoder {
         mapping: CSVColumnMapping,
         line: Int,
         nullHandling: CSVNullHandling,
+        projection: Projection,
     ) throws -> Feature {
         var properties: [String: Sendable] = [:]
 
@@ -237,7 +250,7 @@ public enum CSVCoder {
             if !isNullValue(text) {
                 // The reader auto-detects the format: WKT (with or without an
                 // `SRID=…;` prefix), hex-encoded WKB/EWKB/TWKB, or GeoJSON.
-                guard let decoded = GeoJsonReader.geometryFrom(string: text) else {
+                guard let decoded = decodeGeometry(text, projection: projection) else {
                     throw CSVError.invalidGeometry(detail: "row \(line): could not parse geometry")
                 }
 
@@ -261,23 +274,37 @@ public enum CSVCoder {
                 at: longitudeIndex,
                 line: line,
                 name: "longitude")
-            guard (-90.0 ... 90.0).contains(latitude) else {
-                throw CSVError.invalidCoordinate(
-                    detail: "row \(line): latitude \(latitude) is out of range")
-            }
-            guard (-180.0 ... 180.0).contains(longitude) else {
-                throw CSVError.invalidCoordinate(
-                    detail: "row \(line): longitude \(longitude) is out of range")
-            }
-
             var altitude: Double?
             if let altitudeIndex = mapping.altitudeIndex, altitudeIndex < row.count {
                 altitude = try altitudeValue(in: row, at: altitudeIndex, line: line)
             }
-            geometry = Point(Coordinate3D(
-                latitude: latitude,
-                longitude: longitude,
-                altitude: altitude))
+
+            if projection == .epsg4326 {
+                guard (-90.0 ... 90.0).contains(latitude) else {
+                    throw CSVError.invalidCoordinate(
+                        detail: "row \(line): latitude \(latitude) is out of range")
+                }
+                guard (-180.0 ... 180.0).contains(longitude) else {
+                    throw CSVError.invalidCoordinate(
+                        detail: "row \(line): longitude \(longitude) is out of range")
+                }
+                geometry = Point(Coordinate3D(
+                    latitude: latitude,
+                    longitude: longitude,
+                    altitude: altitude))
+            }
+            else {
+                let coordinate = Coordinate3D(
+                    x: longitude,
+                    y: latitude,
+                    z: altitude,
+                    projection: projection)
+                guard coordinate.isValid else {
+                    throw CSVError.invalidCoordinate(
+                        detail: "row \(line): coordinate is outside the projection's valid extent")
+                }
+                geometry = Point(coordinate)
+            }
         }
 
         // A header without a geometry column must still provide a coordinate
@@ -308,7 +335,7 @@ public enum CSVCoder {
             guard index < row.count else { continue }
 
             switch mapping.roles[index] {
-            case .altitude, .geometry, .id, .latitude, .longitude:
+            case .altitude, .geometry, .id, .latitude, .longitude, .projection:
                 continue
             case .property:
                 let value = row[index]
@@ -321,6 +348,145 @@ public enum CSVCoder {
 
         feature.properties = properties
         return feature
+    }
+
+    /// Decodes a hex string into bytes for WKB/EWKB/TWKB geometry cells.
+    private static func hexData(_ string: String) -> Data? {
+        let characters = Array(string.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard characters.count.isMultiple(of: 2), characters.isNotEmpty else {
+            return nil
+        }
+
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(characters.count / 2)
+        for index in stride(from: 0, to: characters.count, by: 2) {
+            guard let byte = UInt8(String(characters[index ... index + 1]), radix: 16) else {
+                return nil
+            }
+            bytes.append(byte)
+        }
+        return Data(bytes)
+    }
+
+    /// Resolves a CRS/projection column for the whole file.
+    ///
+    /// A CRS column is optional. When present, all non-empty values must
+    /// resolve to the same projection; empty/NULL cells fall back to
+    /// ``CSVReadOptions/projection``.
+    private static func resolvedProjection(
+        rows: [[String]],
+        mapping: CSVColumnMapping,
+        fallback: Projection,
+    ) throws -> Projection {
+        guard let projectionIndex = mapping.projectionIndex else {
+            return fallback
+        }
+
+        var resolved: Projection?
+        for (lineIndex, row) in rows.dropFirst().enumerated() {
+            guard projectionIndex < row.count else { continue }
+            let text = row[projectionIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            if isNullValue(text) {
+                continue
+            }
+            guard let projection = parseProjection(text) else {
+                throw CSVError.invalidProjection(
+                    detail: "row \(lineIndex + 2): unknown projection '\(text)'")
+            }
+            if let resolved, resolved != projection {
+                throw CSVError.invalidProjection(
+                    detail: "row \(lineIndex + 2): projection '\(text)' conflicts with an earlier row")
+            }
+            resolved = projection
+        }
+
+        return resolved ?? fallback
+    }
+
+    /// Parses a CRS/projection identifier from a CSV cell.
+    ///
+    /// Accepts plain SRIDs, `EPSG:n`, `urn:ogc:def:crs:EPSG::n`, `SRID=n`,
+    /// `noSRID`/`none`, and WKT strings recognized by GISTools.
+    private static func parseProjection(_ text: String) -> Projection? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = trimmed.lowercased()
+
+        if lower == "nosrid" || lower == "none" {
+            return .noSRID
+        }
+
+        if lower.hasPrefix("srid=") {
+            let value = trimmed.dropFirst("srid=".count)
+                .prefix { $0 != ";" }
+            return Int(value).flatMap(Projection.init(srid:))
+        }
+
+        if lower.hasPrefix("epsg:") {
+            return Int(trimmed.dropFirst("epsg:".count))
+                .flatMap(Projection.init(srid:))
+        }
+
+        if lower.hasPrefix("urn:") {
+            let value = trimmed.split(separator: ":").last.map(String.init) ?? ""
+            return Int(value).flatMap(Projection.init(srid:))
+        }
+
+        if let srid = Int(trimmed) {
+            return Projection(srid: srid)
+        }
+
+        return Projection(wkt: trimmed)
+    }
+
+    /// Decodes a geometry cell using the CSV's coordinate projection.
+    ///
+    /// GeoJSON geometry cells are defined as EPSG:4326 and are projected to
+    /// the selected projection. WKT/WKB values without an embedded SRID are
+    /// interpreted in the selected projection; embedded SRIDs take precedence.
+    private static func decodeGeometry(
+        _ text: String,
+        projection: Projection,
+    ) -> GeoJsonGeometry? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if trimmed.hasPrefix("{") {
+            return GeoJsonReader.geometryFrom(string: trimmed, targetProjection: projection)
+        }
+
+        if let data = hexData(trimmed) {
+            if let geometry = try? WKBCoder.decode(
+                wkb: data,
+                sourceProjection: nil,
+                targetProjection: projection)
+            {
+                return geometry
+            }
+            if let geometry = try? WKBCoder.decode(
+                wkb: data,
+                sourceProjection: projection,
+                targetProjection: projection)
+            {
+                return geometry
+            }
+            if let geometry = try? TWKBCoder.decode(
+                twkb: data,
+                sourceProjection: nil,
+                targetProjection: projection)
+            {
+                return geometry
+            }
+            return try? TWKBCoder.decode(
+                twkb: data,
+                sourceProjection: projection,
+                targetProjection: projection)
+        }
+
+        let sourceProjection: Projection? = trimmed.hasPrefix("SRID=") ? nil : projection
+        return try? WKTCoder.decode(
+            wkt: trimmed,
+            sourceProjection: sourceProjection,
+            targetProjection: projection)
     }
 
     /// Parses a required latitude or longitude value.
@@ -370,32 +536,79 @@ public enum CSVCoder {
         from featureCollection: FeatureCollection,
         options: CSVWriteOptions,
     ) throws -> [[String]] {
-        let features = featureCollection.features
+        let output = options.projection.map { featureCollection.projected(to: $0) }
+            ?? featureCollection
+        let features = output.features
+        let projection = options.projection ?? featureCollection.projection
+        let projectionColumn = try projectionColumnName(options: options)
 
-        // An explicit geometry format always uses the geometry column. Only
-        // `.auto` keeps the all-points lat/lon/altitude layout, and only when
-        // the points are in EPSG:4326. Other projections must use a geometry
-        // column so their coordinates aren't misread as degrees.
+        // An explicit geometry format always uses the geometry column. `.auto`
+        // keeps the point-coordinate layout for any projection; non-4326
+        // values use x/y/z column names unless another style was requested.
         if options.geometryFormat == .auto,
-           features.allSatisfy({ $0.geometry is Point && $0.projection == .epsg4326 })
+           features.allSatisfy({ $0.geometry is Point })
         {
-            return pointRows(features, options: options)
+            return try pointRows(
+                features,
+                projection: projection,
+                projectionColumn: projectionColumn,
+                options: options)
         }
-        return try mixedRows(features, options: options)
+        return try mixedRows(
+            features,
+            projection: projection,
+            projectionColumn: projectionColumn,
+            options: options)
+    }
+
+    /// Validates and returns the optional CRS column name.
+    private static func projectionColumnName(
+        options: CSVWriteOptions,
+    ) throws -> String? {
+        guard let rawName = options.projectionColumnName else { return nil }
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard name.isNotEmpty,
+              CSVColumnMapping.projectionAliases.contains(name.lowercased())
+        else {
+            throw CSVError.invalidProjection(
+                detail: "projection column name '\(rawName)' must be one of projection, crs, or srid")
+        }
+        return name
+    }
+
+    /// Formats the output projection for a CRS column.
+    private static func projectionValue(_ projection: Projection) -> String {
+        projection.hasSRID ? "EPSG:\(projection.srid)" : "noSRID"
     }
 
     /// Rows when every feature is a simple point.
     ///
-    /// Column order: `id`, `longitude`, `latitude`, `altitude`, then the
-    /// remaining property columns.
+    /// Column order: `id`, coordinate columns, then the remaining property
+    /// columns. EPSG:4326 defaults to `longitude`/`latitude`/`altitude`;
+    /// other projections default to `x`/`y`/`z`.
     private static func pointRows(
         _ features: [Feature],
+        projection: Projection,
+        projectionColumn: String?,
         options: CSVWriteOptions,
-    ) -> [[String]] {
+    ) throws -> [[String]] {
+        let useXY: Bool
+        switch options.coordinateColumns {
+        case .automatic: useXY = projection != .epsg4326
+        case .xy: useXY = true
+        case .longitudeLatitude: useXY = false
+        }
+
         let propertyColumns = orderedPropertyColumns(
             features,
             excluding: CSVColumnMapping.allReservedNames)
-        let header = ["id", "longitude", "latitude", "altitude"] + propertyColumns
+        let coordinateNames = useXY
+            ? ("x", "y", "z")
+            : ("longitude", "latitude", "altitude")
+        let header = ["id"]
+            + (projectionColumn.map { [$0] } ?? [])
+            + [coordinateNames.0, coordinateNames.1, coordinateNames.2]
+            + propertyColumns
 
         var rows: [[String]] = options.includeHeader ? [header] : []
         for feature in features {
@@ -405,6 +618,9 @@ public enum CSVCoder {
 
             var row: [String] = []
             row.append(idValue(feature.id))
+            if projectionColumn != nil {
+                row.append(projectionValue(projection))
+            }
             row.append(formatNumber(coordinate.longitude))
             row.append(formatNumber(coordinate.latitude))
             row.append(coordinate.altitude.map(formatNumber) ?? options.nullValue)
@@ -416,13 +632,14 @@ public enum CSVCoder {
         return rows
     }
 
-    /// Rows when at least one feature has a complex (non-Point) geometry, a
-    /// non-EPSG:4326 point, or no geometry, or when an explicit geometry
-    /// format is requested.
+    /// Rows when at least one feature has a complex (non-Point) geometry, no
+    /// geometry, or an explicit geometry format is requested.
     ///
     /// Column order: `id`, property columns, then the geometry column last.
     private static func mixedRows(
         _ features: [Feature],
+        projection: Projection,
+        projectionColumn: String?,
         options: CSVWriteOptions,
     ) throws -> [[String]] {
         let geometryColumnName = options.geometryColumnName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -436,14 +653,23 @@ public enum CSVCoder {
             .union([geometryColumnName.lowercased()])
         let propertyColumns = orderedPropertyColumns(features, excluding: reserved)
 
-        let header = ["id"] + propertyColumns + [geometryColumnName]
+        let header = ["id"]
+            + (projectionColumn.map { [$0] } ?? [])
+            + propertyColumns
+            + [geometryColumnName]
         var rows: [[String]] = options.includeHeader ? [header] : []
         for feature in features {
             var row: [String] = [idValue(feature.id)]
+            if projectionColumn != nil {
+                row.append(projectionValue(projection))
+            }
             for column in propertyColumns {
                 row.append(value(for: column, in: feature, nullValue: options.nullValue))
             }
-            try row.append(geometryValue(feature.geometry, format: options.geometryFormat))
+            try row.append(geometryValue(
+                feature.geometry,
+                format: options.geometryFormat,
+                projection: projection))
             rows.append(row)
         }
         return rows
@@ -455,12 +681,16 @@ public enum CSVCoder {
     private static func geometryValue(
         _ geometry: GeoJsonGeometry?,
         format: CSVGeometryFormat,
+        projection: Projection,
     ) throws -> String {
         guard let geometry else { return "" }
 
         switch format {
         case .auto, .wkt:
-            guard let wkt = geometry.asWKT else {
+            guard let wkt = WKTCoder.encode(
+                geometry: geometry,
+                targetProjection: projection)
+            else {
                 throw CSVError.invalidGeometry(
                     detail: "could not encode \(type(of: geometry)) as WKT")
             }
@@ -468,7 +698,7 @@ public enum CSVCoder {
             return wkt
 
         case .ewkb:
-            guard let data = WKBCoder.encode(geometry: geometry) else {
+            guard let data = WKBCoder.encode(geometry: geometry, targetProjection: projection) else {
                 throw CSVError.invalidGeometry(
                     detail: "could not encode \(type(of: geometry)) as EWKB")
             }

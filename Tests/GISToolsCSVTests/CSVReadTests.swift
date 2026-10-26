@@ -671,3 +671,241 @@ struct CSVReadTests {
     }
 
 }
+
+// MARK: - Projection support
+
+struct CSVProjectionReadTests {
+
+    @Test
+    func readXYCoordinatesInWebMercator() throws {
+        let data = Data("""
+        id,x,y,name
+        1,1281000,6125000,Munich
+        """.utf8)
+
+        let fc = try CSVCoder.read(
+            from: data,
+            options: CSVReadOptions(projection: .epsg3857))
+        let point = try #require(fc.features.first?.geometry as? Point)
+
+        #expect(point.coordinate.projection == .epsg3857)
+        #expect(point.coordinate.x == 1_281_000)
+        #expect(point.coordinate.y == 6_125_000)
+        #expect(fc.features.first?.properties["name"] as? String == "Munich")
+    }
+
+    @Test
+    func readXYCoordinatesInNoSRID() throws {
+        let data = Data("""
+        x,y
+        12.5,34.5
+        """.utf8)
+
+        let fc = try CSVCoder.read(
+            from: data,
+            options: CSVReadOptions(projection: .noSRID))
+        let point = try #require(fc.features.first?.geometry as? Point)
+
+        #expect(point.coordinate.projection == .noSRID)
+        #expect(point.coordinate.x == 12.5)
+        #expect(point.coordinate.y == 34.5)
+    }
+
+    @Test
+    func canonicalLongitudeLatitudeWinsOverXY() throws {
+        let data = Data("""
+        x,y,longitude,latitude
+        0,0,11.5,48.1
+        """.utf8)
+
+        let fc = try CSVCoder.read(from: data)
+        let feature = try #require(fc.features.first)
+        let point = try #require(feature.geometry as? Point)
+
+        #expect(point.coordinate.longitude == 11.5)
+        #expect(point.coordinate.latitude == 48.1)
+        #expect(feature.properties["x"] as? Int == 0)
+        #expect(feature.properties["y"] as? Int == 0)
+    }
+
+    @Test
+    func readProjectedWKTGeometry() throws {
+        let data = Data("""
+        geometry
+        POINT (1281000 6125000)
+        """.utf8)
+
+        let fc = try CSVCoder.read(
+            from: data,
+            options: CSVReadOptions(projection: .epsg3857))
+        let point = try #require(fc.features.first?.geometry as? Point)
+
+        #expect(point.coordinate.projection == .epsg3857)
+        #expect(point.coordinate.x == 1_281_000)
+        #expect(point.coordinate.y == 6_125_000)
+    }
+}
+
+// MARK: - Additional projection coverage
+
+struct CSVProjectionAdditionalReadTests {
+
+    @Test
+    func readECEFCoordinates() throws {
+        let ecef = Coordinate3D(latitude: 48.1, longitude: 11.5)
+            .projected(to: .epsg4978)
+        let data = Data("""
+        x,y,z
+        \(ecef.x),\(ecef.y),\(ecef.z ?? 0)
+        """.utf8)
+
+        let fc = try CSVCoder.read(
+            from: data,
+            options: CSVReadOptions(projection: .epsg4978))
+        let point = try #require(fc.features.first?.geometry as? Point)
+
+        #expect(point.coordinate.projection == .epsg4978)
+        #expect(abs(point.coordinate.x - ecef.x) < 0.000001)
+        #expect(abs(point.coordinate.y - ecef.y) < 0.000001)
+    }
+
+    @Test
+    func readCustomProjectionCoordinates() throws {
+        let srid = 900_501
+        let custom = CustomProjection(
+            srid: srid,
+            kind: .planar,
+            forward: { coordinate in
+                Coordinate3D(
+                    x: coordinate.longitude * 1_000.0,
+                    y: coordinate.latitude * 1_000.0,
+                    projection: .epsg4326)
+            },
+            inverse: { coordinate in
+                Coordinate3D(
+                    latitude: coordinate.latitude / 1_000.0,
+                    longitude: coordinate.longitude / 1_000.0)
+            })
+        _ = Projection.register(custom)
+        let projection = try #require(Projection(srid: srid))
+
+        let data = Data("""
+        x,y
+        11500,48100
+        """.utf8)
+        let fc = try CSVCoder.read(
+            from: data,
+            options: CSVReadOptions(projection: projection))
+        let point = try #require(fc.features.first?.geometry as? Point)
+
+        #expect(point.coordinate.projection == projection)
+        #expect(point.coordinate.x == 11_500)
+        #expect(point.coordinate.y == 48_100)
+    }
+
+    @Test
+    func invalidProjectedCoordinateThrows() throws {
+        let data = Data("""
+        x,y
+        999999999999999999999,999999999999999999999
+        """.utf8)
+
+        do {
+            _ = try CSVCoder.read(
+                from: data,
+                options: CSVReadOptions(projection: .epsg3857))
+            Issue.record("Expected invalid projected coordinate to throw")
+        }
+        catch let error as CSVError {
+            guard case .invalidCoordinate = error else {
+                Issue.record("Expected invalidCoordinate, got \(error)")
+                return
+            }
+        }
+    }
+}
+
+// MARK: - CRS column support
+
+struct CSVCRSColumnReadTests {
+
+    @Test
+    func readProjectionFromCRSColumn() throws {
+        let data = Data("""
+        crs,x,y,name
+        EPSG:3857,1281000,6125000,Munich
+        """.utf8)
+
+        let fc = try CSVCoder.read(from: data)
+        let point = try #require(fc.features.first?.geometry as? Point)
+
+        #expect(point.coordinate.projection == .epsg3857)
+        #expect(point.coordinate.x == 1_281_000)
+        #expect(fc.features.first?.properties["name"] as? String == "Munich")
+    }
+
+    @Test
+    func readProjectionFromSRIDColumn() throws {
+        let data = Data("""
+        srid,longitude,latitude
+        3857,1281000,6125000
+        """.utf8)
+
+        let fc = try CSVCoder.read(from: data)
+        let point = try #require(fc.features.first?.geometry as? Point)
+        #expect(point.coordinate.projection == .epsg3857)
+    }
+
+    @Test
+    func crsColumnOverridesFallback() throws {
+        let data = Data("""
+        projection,x,y
+        noSRID,12.5,34.5
+        """.utf8)
+
+        let fc = try CSVCoder.read(
+            from: data,
+            options: CSVReadOptions(projection: .epsg3857))
+        let point = try #require(fc.features.first?.geometry as? Point)
+        #expect(point.coordinate.projection == .noSRID)
+    }
+
+    @Test
+    func invalidCRSColumnValueThrows() throws {
+        let data = Data("""
+        crs,x,y
+        not-a-projection,12.5,34.5
+        """.utf8)
+
+        do {
+            _ = try CSVCoder.read(from: data)
+            Issue.record("Expected invalid CRS to throw")
+        }
+        catch let error as CSVError {
+            guard case .invalidProjection = error else {
+                Issue.record("Expected invalidProjection, got \(error)")
+                return
+            }
+        }
+    }
+
+    @Test
+    func inconsistentCRSColumnValuesThrow() throws {
+        let data = Data("""
+        crs,x,y
+        EPSG:3857,1281000,6125000
+        EPSG:4326,11.5,48.1
+        """.utf8)
+
+        do {
+            _ = try CSVCoder.read(from: data)
+            Issue.record("Expected inconsistent CRS to throw")
+        }
+        catch let error as CSVError {
+            guard case .invalidProjection = error else {
+                Issue.record("Expected invalidProjection, got \(error)")
+                return
+            }
+        }
+    }
+}

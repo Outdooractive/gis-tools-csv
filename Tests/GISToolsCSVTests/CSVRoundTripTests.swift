@@ -258,11 +258,29 @@ struct CSVRoundTripTests {
     }
 
     @Test
-    func roundTripProjectedPointsAreReprojected() throws {
+    func roundTripProjectedPointsPreserveProjection() throws {
         var point = Feature(Point(Coordinate3D.epsg3857(x: 1_281_000, y: 6_125_000)))
         point.id = .int(1)
 
         let data = try CSVCoder.write(FeatureCollection([point]))
+        let roundTrip = try CSVCoder.read(
+            from: data,
+            options: CSVReadOptions(projection: .epsg3857))
+
+        let pointRT = try #require(roundTrip.features[0].geometry as? Point)
+        #expect(pointRT.coordinate.projection == .epsg3857)
+        #expect(abs(pointRT.coordinate.x - 1_281_000) < 0.0000000001)
+        #expect(abs(pointRT.coordinate.y - 6_125_000) < 0.0000000001)
+    }
+
+    @Test
+    func writeProjectedPointsAsWGS84() throws {
+        var point = Feature(Point(Coordinate3D.epsg3857(x: 1_281_000, y: 6_125_000)))
+        point.id = .int(1)
+
+        let data = try CSVCoder.write(
+            FeatureCollection([point]),
+            options: CSVWriteOptions(projection: .epsg4326))
         let roundTrip = try CSVCoder.read(from: data)
 
         let pointRT = try #require(roundTrip.features[0].geometry as? Point)
@@ -308,4 +326,62 @@ struct CSVRoundTripTests {
         #expect(roundTrip.features[0].properties["name"] as? String == "a;b")
     }
 
+}
+
+// MARK: - Projection support
+
+struct CSVProjectionRoundTripTests {
+
+    @Test
+    func roundTripWebMercator() throws {
+        var point = Feature(Point(Coordinate3D.epsg3857(x: 1_281_000, y: 6_125_000)))
+        point.id = .int(1)
+
+        let data = try CSVCoder.write(FeatureCollection([point]))
+        let roundTrip = try CSVCoder.read(
+            from: data,
+            options: CSVReadOptions(projection: .epsg3857))
+        let pointRT = try #require(roundTrip.features[0].geometry as? Point)
+
+        #expect(pointRT.coordinate.projection == .epsg3857)
+        #expect(abs(pointRT.coordinate.x - 1_281_000) < 0.0000000001)
+        #expect(abs(pointRT.coordinate.y - 6_125_000) < 0.0000000001)
+    }
+
+    @Test
+    func roundTripNoSRID() throws {
+        var point = Feature(Point(Coordinate3D.noSRID(x: 12.5, y: 34.5)))
+        point.id = .int(1)
+
+        let data = try CSVCoder.write(FeatureCollection([point]))
+        let roundTrip = try CSVCoder.read(
+            from: data,
+            options: CSVReadOptions(projection: .noSRID))
+        let pointRT = try #require(roundTrip.features[0].geometry as? Point)
+
+        #expect(pointRT.coordinate.projection == .noSRID)
+        #expect(pointRT.coordinate.x == 12.5)
+        #expect(pointRT.coordinate.y == 34.5)
+    }
+}
+
+// MARK: - CRS column support
+
+struct CSVCRSColumnRoundTripTests {
+
+    @Test
+    func roundTripCRSColumn() throws {
+        var point = Feature(Point(Coordinate3D.epsg3857(x: 1_281_000, y: 6_125_000)))
+        point.id = .int(1)
+
+        let data = try CSVCoder.write(
+            FeatureCollection([point]),
+            options: CSVWriteOptions(projectionColumnName: "crs"))
+        let roundTrip = try CSVCoder.read(from: data)
+        let pointRT = try #require(roundTrip.features[0].geometry as? Point)
+
+        #expect(pointRT.coordinate.projection == .epsg3857)
+        #expect(abs(pointRT.coordinate.x - 1_281_000) < 0.0000000001)
+        #expect(abs(pointRT.coordinate.y - 6_125_000) < 0.0000000001)
+    }
 }
