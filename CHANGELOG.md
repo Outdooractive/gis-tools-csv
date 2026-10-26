@@ -48,6 +48,8 @@ All notable changes to this project are documented in this file.
   run.
 
 ### Fixed
+- CRLF characters inside quoted fields are now quoted correctly during writing
+  on all platforms (CRLF is a single grapheme cluster in Swift strings).
 
 - UTF-8 byte order marks no longer break header detection.
 - A quote inside an unquoted field is preserved instead of dropped.

@@ -176,10 +176,11 @@ enum CSVWriter {
 
     /// Quotes a field if necessary and escapes embedded quotes.
     private static func escape(_ field: String, delimiter: Character) -> String {
+        let scalars = field.unicodeScalars
         let mustQuote = field.contains(delimiter)
-            || field.contains("\"")
-            || field.contains("\n")
-            || field.contains("\r")
+            || scalars.contains("\"")
+            || scalars.contains("\n")
+            || scalars.contains("\r")
         if mustQuote {
             let escaped = field.replacing("\"", with: "\"\"")
             return "\"\(escaped)\""

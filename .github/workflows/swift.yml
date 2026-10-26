@@ -29,12 +29,10 @@ jobs:
     name: test, coverage, docs (Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    container: swift:latest
 
     steps:
       - uses: actions/checkout@v4
-      - uses: swift-actions/setup-swift@v3
-        with:
-          swift-version: "6.1"
       - name: Test with coverage
         run: swift test --enable-code-coverage
       - name: Coverage
