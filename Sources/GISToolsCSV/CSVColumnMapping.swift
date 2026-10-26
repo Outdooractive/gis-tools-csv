@@ -15,6 +15,8 @@ enum CSVColumnRole: Equatable {
     case altitude
     /// A column used for the Feature id.
     case id
+    /// A column containing a CRS/projection identifier.
+    case projection
     /// A plain property column.
     case property
 
@@ -44,6 +46,9 @@ struct CSVColumnMapping {
 
     /// The header names accepted as an altitude column.
     static let altitudeAliases: Set<String> = ["altitude", "elevation", "elev", "z"]
+
+    /// Header names accepted as a CRS/projection column.
+    static let projectionAliases: Set<String> = ["projection", "crs", "srid"]
 
     /// The set of normalized header names accepted as an id column.
     ///
@@ -109,6 +114,9 @@ struct CSVColumnMapping {
     /// The 0-based index of the id column, if any.
     let idIndex: Int?
 
+    /// The 0-based index of the CRS/projection column, if any.
+    let projectionIndex: Int?
+
     /// Whether any geometry-bearing column (geometry or a lat/lon pair) exists.
     var hasGeometrySource: Bool {
         geometryIndex != nil || (latitudeIndex != nil && longitudeIndex != nil)
@@ -125,6 +133,7 @@ struct CSVColumnMapping {
         var geometryIndex: Int? = nil
         var altitudeIndex: Int? = nil
         var idIndex: Int? = nil
+        var projectionIndex: Int? = nil
 
         // Prefer the canonical longitude/latitude names. Fall back to x/y
         // only when neither canonical coordinate column is present, so a
@@ -161,6 +170,10 @@ struct CSVColumnMapping {
                 roles.append(.altitude)
                 altitudeIndex = index
             }
+            else if Self.projectionAliases.contains(normalized) {
+                roles.append(.projection)
+                projectionIndex = index
+            }
             else if Self.idAliases.contains(normalized) {
                 roles.append(.id)
                 idIndex = index
@@ -177,6 +190,7 @@ struct CSVColumnMapping {
         self.longitudeIndex = longitudeIndex
         self.altitudeIndex = altitudeIndex
         self.idIndex = idIndex
+        self.projectionIndex = projectionIndex
     }
 
 }

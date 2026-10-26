@@ -8,6 +8,7 @@ CSV read and write support for Swift, built on top of [**gis-tools**](https://gi
 - Works directly with Postgres/PostGIS CSV exports (`COPY TO`)
 - **Header required** — geometry is never guessed
 - Geometry columns (`geometry`, `geom`) parsed with **format auto-detection**: WKT (with or without an `SRID=…;` prefix), hex-encoded WKB/EWKB/TWKB, or GeoJSON
+- Optional `projection`/`crs`/`srid` column selects the file CRS; a single column value applies to the whole file
 - Point geometry from `latitude`/`longitude` or `x`/`y` columns (including `lat`, `lon`, `lng` aliases), with optional altitude and any registered projection
 - Feature ids from an `id` column (and many aliases), matched case-insensitively
 - All other columns become `Feature` properties (booleans, ints, doubles, strings)
@@ -67,13 +68,15 @@ let fc = try CSVCoder.read(from: url, options: CSVReadOptions(treatAsLineString:
 guard let fc = FeatureCollection(csv: url) else { return }
 ```
 
+A `projection`, `crs`, or `srid` column overrides `CSVReadOptions.projection` for the whole file. All non-empty CRS values in the column must resolve to the same projection; empty values use the option fallback.
+
 `CSVReadOptions` controls how a CSV is read:
 
 | Option | Default | Description |
 |---|---|---|
 | `delimiter` | `","` | The field delimiter. Any single `Character` is accepted. |
 | `nullHandling` | `.keepAsString` | How `NULL` and empty values are treated. `.keepAsString` keeps them as strings; `.omit` drops the property entirely. `NULL` is matched case-insensitively. Null handling also applies to the id column and an optional altitude. |
-| `projection` | `.epsg4326` | The CRS of the coordinate values. For non-4326 projections, longitude/latitude or x/y columns are treated as x/y and validated against that projection. |
+| `projection` | `.epsg4326` | Fallback CRS of the coordinate values. A `projection`/`crs`/`srid` column overrides it. For non-4326 projections, longitude/latitude or x/y columns are treated as x/y and validated against that projection. |
 | `treatAsLineString` | `false` | Concatenates the coordinates of all rows (in row order) into a single `LineString` feature, dropping row properties and ids. Works for `latitude`/`longitude` rows and for `POINT`/`MULTIPOINT`/`LINESTRING`/`MULTILINESTRING` geometries in a `geometry`/`geom` column; other geometry types and fewer than 2 coordinates in total are errors. |
 
 ### Writing
@@ -104,6 +107,7 @@ try CSVCoder.write(
 | `delimiter` | `","` | The field delimiter. |
 | `projection` | `nil` | Output projection. `nil` preserves the collection projection; a value reprojects first. |
 | `coordinateColumns` | `.automatic` | Point layout names: `.automatic` uses longitude/latitude/altitude for EPSG:4326 and x/y/z otherwise; `.longitudeLatitude` and `.xy` force a style. |
+| `projectionColumnName` | `nil` | Optional `projection`/`crs`/`srid` column to write the output CRS in every row. |
 | `geometryFormat` | `.auto` | How geometry is written. `.auto` uses the point layout for all-point collections and a WKT geometry column otherwise. `.wkt`, `.ewkb` (hex), and `.geojson` always emit a geometry column. |
 | `geometryColumnName` | `"geometry"` | The name of the geometry column. It must not be empty or collide with a coordinate/id column. |
 | `includeHeader` | `true` | Whether to write the header row. |
@@ -120,6 +124,7 @@ The header row is matched **case-insensitively**:
 | Latitude / Y    | `latitude`, `lat`, `y`                         |
 | Longitude / X   | `longitude`, `long`, `lon`, `lng`, `x`         |
 | Altitude / Z    | `altitude`, `elevation`, `elev`, `z`           |
+| CRS / projection | `projection`, `crs`, `srid`                    |
 | Feature id      | `id`, `feature_id`, `feature_identifier`, `identifier`, `ident`, `fid`, `objectid`, `object_id`, `gid`, `idfield` |
 
 Any other column becomes a `Feature` property. Numeric properties are parsed as `Int` or `Double`, `true`/`false` as `Bool`, everything else stays a `String`. Only canonical integer spellings become `Int`, so leading-zero values such as `00123` stay strings. `NaN` and `Infinity` stay strings because they are not valid JSON numbers.
@@ -160,7 +165,7 @@ Geometry written with `.wkt` or `.ewkb` uses the output projection (the collecti
 | `CSVCoder.write(_:options:)` | Serializes a `FeatureCollection` to CSV `Data` |
 | `CSVCoder.write(_:to:options:)` | Writes a `FeatureCollection` to a CSV file |
 | `CSVReadOptions` | Options controlling CSV reading (`delimiter`, `nullHandling`, `projection`, `treatAsLineString`) |
-| `CSVWriteOptions` | Options controlling CSV writing (`delimiter`, `projection`, `coordinateColumns`, `geometryFormat`, `geometryColumnName`, `includeHeader`, `nullValue`, `lineEnding`) |
+| `CSVWriteOptions` | Options controlling CSV writing (`delimiter`, `projection`, `coordinateColumns`, `projectionColumnName`, `geometryFormat`, `geometryColumnName`, `includeHeader`, `nullValue`, `lineEnding`) |
 | `CSVCoordinateColumns` | Point-layout column naming: `.automatic`, `.longitudeLatitude`, or `.xy` |
 | `CSVError` | File, encoding, parsing, coordinate, and geometry errors |
 | `FeatureCollection(csv:options:)` | Convenience init from a CSV file (returns `nil` on failure) |
@@ -199,7 +204,7 @@ CI runs tests on macOS and Linux, enforces at least 95% line coverage on Linux, 
 ## Limitations
 
 - A header row is required — geometry columns are never guessed.
-- CSV has no embedded CRS metadata. Coordinate columns default to EPSG:4326; projected data must set `CSVReadOptions.projection` (and optionally `CSVWriteOptions.projection`).
+- CSV has no embedded CRS metadata. Coordinate columns default to EPSG:4326; projected data must set `CSVReadOptions.projection` or a `projection`/`crs`/`srid` column. CRS column values must be consistent across rows.
 - Feature and collection foreign members, collection metadata, and bounding boxes are not written.
 - Property names that collide with reserved column names are omitted on write.
 - Property types are inferred, so a string `"1"` reads back as an `Int`, and nested values are not reconstructed.

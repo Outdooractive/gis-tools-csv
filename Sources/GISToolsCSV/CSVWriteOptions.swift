@@ -74,6 +74,12 @@ public struct CSVWriteOptions: Sendable, Equatable, Hashable {
     /// The point-coordinate column names (default `.automatic`).
     public var coordinateColumns: CSVCoordinateColumns
 
+    /// An optional CRS column name (`projection`, `crs`, or `srid`).
+    ///
+    /// When set, every row receives a CRS value for the output projection.
+    /// A `nil` value writes no CRS column.
+    public var projectionColumnName: String?
+
     /// How geometry is written (default `.auto`).
     public var geometryFormat: CSVGeometryFormat
 
@@ -95,6 +101,7 @@ public struct CSVWriteOptions: Sendable, Equatable, Hashable {
     ///   - delimiter: The field delimiter (default `","`).
     ///   - projection: The output projection, or `nil` for the collection projection.
     ///   - coordinateColumns: The point-coordinate column names (default `.automatic`).
+    ///   - projectionColumnName: An optional CRS column name (`projection`, `crs`, or `srid`).
     ///   - geometryFormat: How geometry is written (default `.auto`).
     ///   - geometryColumnName: The name of the geometry column (default `"geometry"`).
     ///   - includeHeader: Whether to write the header row (default `true`).
@@ -104,6 +111,7 @@ public struct CSVWriteOptions: Sendable, Equatable, Hashable {
         delimiter: Character = CSVCoder.defaultDelimiter,
         projection: Projection? = nil,
         coordinateColumns: CSVCoordinateColumns = .automatic,
+        projectionColumnName: String? = nil,
         geometryFormat: CSVGeometryFormat = .auto,
         geometryColumnName: String = "geometry",
         includeHeader: Bool = true,
@@ -113,6 +121,7 @@ public struct CSVWriteOptions: Sendable, Equatable, Hashable {
         self.delimiter = delimiter
         self.projection = projection
         self.coordinateColumns = coordinateColumns
+        self.projectionColumnName = projectionColumnName
         self.geometryFormat = geometryFormat
         self.geometryColumnName = geometryColumnName
         self.includeHeader = includeHeader

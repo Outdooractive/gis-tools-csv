@@ -46,6 +46,7 @@ feature.
 | ``CSVWriteOptions/delimiter`` | `","` | The field delimiter. |
 | ``CSVWriteOptions/projection`` | `nil` | Output projection. `nil` preserves the collection projection. |
 | ``CSVWriteOptions/coordinateColumns`` | `.automatic` | Point-layout names: longitude/latitude/altitude for 4326, x/y/z otherwise. |
+| ``CSVWriteOptions/projectionColumnName`` | `nil` | Optional `projection`/`crs`/`srid` column with the output CRS in every row. |
 | ``CSVWriteOptions/geometryFormat`` | `.auto` | How geometry is written. |
 | ``CSVWriteOptions/geometryColumnName`` | `"geometry"` | The geometry column name. It must not be empty or collide with a coordinate or id column. |
 | ``CSVWriteOptions/includeHeader`` | `true` | Whether to write the header row. |
@@ -63,7 +64,9 @@ feature.
 
 WKT and EWKB output uses the output projection (the collection projection
 unless ``CSVWriteOptions/projection`` is set). GeoJSON output is always
-EPSG:4326, as required by the GeoJSON specification.
+EPSG:4326, as required by the GeoJSON specification. Use
+``CSVWriteOptions/projectionColumnName`` to emit a CRS column explicitly; the
+value is `EPSG:<srid>` or `noSRID`.
 
 ## Property columns
 

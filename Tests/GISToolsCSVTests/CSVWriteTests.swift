@@ -473,3 +473,63 @@ struct CSVProjectionWriteTests {
         #expect(textLines[1].contains("POINT("))
     }
 }
+
+// MARK: - CRS column support
+
+struct CSVCRSColumnWriteTests {
+
+    private func lines(_ data: Data) -> [Substring] {
+        String(decoding: data, as: UTF8.self)
+            .split(separator: "\n", omittingEmptySubsequences: true)
+    }
+
+    @Test
+    func writeCRSColumn() throws {
+        var point = Feature(Point(Coordinate3D.epsg3857(x: 1_281_000, y: 6_125_000)))
+        point.id = .int(1)
+
+        let data = try CSVCoder.write(
+            FeatureCollection([point]),
+            options: CSVWriteOptions(projectionColumnName: "crs"))
+        let textLines = lines(data)
+
+        #expect(textLines[0] == "id,crs,x,y,z")
+        #expect(textLines[1] == "1,EPSG:3857,1281000,6125000,")
+    }
+
+    @Test
+    func writeNoSRIDCRSColumn() throws {
+        var point = Feature(Point(Coordinate3D.noSRID(x: 12.5, y: 34.5)))
+        point.id = .int(1)
+
+        let data = try CSVCoder.write(
+            FeatureCollection([point]),
+            options: CSVWriteOptions(projectionColumnName: "projection"))
+        let textLines = lines(data)
+
+        #expect(textLines[0] == "id,projection,x,y,z")
+        #expect(textLines[1] == "1,noSRID,12.5,34.5,")
+    }
+
+    @Test
+    func invalidProjectionColumnNameThrows() throws {
+        let data = Data("""
+        longitude,latitude
+        11.5,48.1
+        """.utf8)
+        let fc = try CSVCoder.read(from: data)
+
+        do {
+            _ = try CSVCoder.write(
+                fc,
+                options: CSVWriteOptions(projectionColumnName: "not_crs"))
+            Issue.record("Expected invalid projection column name to throw")
+        }
+        catch let error as CSVError {
+            guard case .invalidProjection = error else {
+                Issue.record("Expected invalidProjection, got \(error)")
+                return
+            }
+        }
+    }
+}

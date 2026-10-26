@@ -824,3 +824,88 @@ struct CSVProjectionAdditionalReadTests {
         }
     }
 }
+
+// MARK: - CRS column support
+
+struct CSVCRSColumnReadTests {
+
+    @Test
+    func readProjectionFromCRSColumn() throws {
+        let data = Data("""
+        crs,x,y,name
+        EPSG:3857,1281000,6125000,Munich
+        """.utf8)
+
+        let fc = try CSVCoder.read(from: data)
+        let point = try #require(fc.features.first?.geometry as? Point)
+
+        #expect(point.coordinate.projection == .epsg3857)
+        #expect(point.coordinate.x == 1_281_000)
+        #expect(fc.features.first?.properties["name"] as? String == "Munich")
+    }
+
+    @Test
+    func readProjectionFromSRIDColumn() throws {
+        let data = Data("""
+        srid,longitude,latitude
+        3857,1281000,6125000
+        """.utf8)
+
+        let fc = try CSVCoder.read(from: data)
+        let point = try #require(fc.features.first?.geometry as? Point)
+        #expect(point.coordinate.projection == .epsg3857)
+    }
+
+    @Test
+    func crsColumnOverridesFallback() throws {
+        let data = Data("""
+        projection,x,y
+        noSRID,12.5,34.5
+        """.utf8)
+
+        let fc = try CSVCoder.read(
+            from: data,
+            options: CSVReadOptions(projection: .epsg3857))
+        let point = try #require(fc.features.first?.geometry as? Point)
+        #expect(point.coordinate.projection == .noSRID)
+    }
+
+    @Test
+    func invalidCRSColumnValueThrows() throws {
+        let data = Data("""
+        crs,x,y
+        not-a-projection,12.5,34.5
+        """.utf8)
+
+        do {
+            _ = try CSVCoder.read(from: data)
+            Issue.record("Expected invalid CRS to throw")
+        }
+        catch let error as CSVError {
+            guard case .invalidProjection = error else {
+                Issue.record("Expected invalidProjection, got \(error)")
+                return
+            }
+        }
+    }
+
+    @Test
+    func inconsistentCRSColumnValuesThrow() throws {
+        let data = Data("""
+        crs,x,y
+        EPSG:3857,1281000,6125000
+        EPSG:4326,11.5,48.1
+        """.utf8)
+
+        do {
+            _ = try CSVCoder.read(from: data)
+            Issue.record("Expected inconsistent CRS to throw")
+        }
+        catch let error as CSVError {
+            guard case .invalidProjection = error else {
+                Issue.record("Expected invalidProjection, got \(error)")
+                return
+            }
+        }
+    }
+}

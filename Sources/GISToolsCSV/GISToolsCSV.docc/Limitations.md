@@ -12,10 +12,12 @@ Otherwise reading fails with ``CSVError/missingGeometryColumns``.
 ## No embedded CRS metadata
 
 CSV has no place for a CRS. Coordinate columns default to EPSG:4326; projected
-data must set ``CSVReadOptions/projection``. WKT/WKB geometry cells may carry
-an SRID, while GeoJSON geometry cells are always EPSG:4326. Writing a projected
-collection uses x/y/z columns by default, and `CSVWriteOptions/projection` can
-reproject first if a different output CRS is required.
+data must set ``CSVReadOptions/projection`` or add a `projection`/`crs`/`srid`
+column. CRS column values must be consistent across all non-empty rows. WKT/WKB
+geometry cells may carry an SRID, while GeoJSON geometry cells are always
+EPSG:4326. Writing a projected collection uses x/y/z columns by default, and
+`CSVWriteOptions/projection` can reproject first if a different output CRS is
+required. Use `CSVWriteOptions/projectionColumnName` to write the CRS column.
 
 ## Metadata is lost
 

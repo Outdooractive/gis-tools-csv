@@ -11,6 +11,7 @@ have surrounding whitespace. The following roles are recognized:
 | Latitude / Y | `latitude`, `lat`, `y` |
 | Longitude / X | `longitude`, `long`, `lon`, `lng`, `x` |
 | Altitude / Z | `altitude`, `elevation`, `elev`, `z` |
+| CRS / projection | `projection`, `crs`, `srid` |
 | Feature id | `id`, `feature_id`, `feature_identifier`, `identifier`, `ident`, `fid`, `objectid`, `object_id`, `gid`, `idfield` |
 
 Every other column becomes a `Feature` property. `x`/`y` are used as
@@ -42,6 +43,12 @@ wins whenever it is non-empty.
 For EPSG:4326, coordinate values must be finite and within -90…90 and
 -180…180 degrees. Other projections use the projection's valid extent. The
 altitude is optional; an empty or `NULL` altitude becomes `nil`.
+
+A `projection`, `crs`, or `srid` column overrides
+``CSVReadOptions/projection`` for the whole file. Non-empty values must all
+resolve to the same projection; empty cells use the option fallback. Values may
+be plain SRIDs, `EPSG:n`, `urn:ogc:def:crs:EPSG::n`, `SRID=n`, `noSRID`/`none`,
+or recognized WKT.
 
 ## Options
 

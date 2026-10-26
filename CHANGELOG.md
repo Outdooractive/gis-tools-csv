@@ -42,6 +42,9 @@ All notable changes to this project are documented in this file.
   registered projections.
 - `x`/`y` coordinate column aliases and `CSVCoordinateColumns` for selecting
   longitude/latitude or x/y point layouts.
+- `projection`/`crs`/`srid` CSV columns with consistent file-level CRS
+  handling, plus `CSVWriteOptions.projectionColumnName` for writing a CRS
+  column.
 - `CSVError.malformedCSV(detail:)`, `CSVError.missingGeometryColumns`, and
   `CSVError.invalidGeometryColumnName(name:)`.
 - `Equatable` and `Hashable` conformances for `CSVReadOptions`,

@@ -9,7 +9,8 @@ CSV read and write support for Swift, built on top of
 requires a header row, recognizes geometry columns (WKT, EWKB/WKB/TWKB hex, or
 GeoJSON) as well as coordinate columns, and maps every other column to a
 feature property. Coordinate columns may be longitude/latitude or x/y and may
-use any registered projection.
+use any registered projection. An optional `projection`/`crs`/`srid` column can
+declare the file CRS.
 
 The package is small and has no dependencies beyond `GISTools`:
 
