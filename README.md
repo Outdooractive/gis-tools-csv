@@ -25,8 +25,8 @@ Swift 6.1 or higher. Compiles on iOS (≥ iOS 15), macOS (≥ macOS 15), tvOS (�
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Outdooractive/gis-tools", exact: "3.0.0-beta.5"),
-    .package(url: "https://github.com/Outdooractive/gis-tools-csv", from: "3.0.0-beta.1"),
+    .package(url: "https://github.com/Outdooractive/gis-tools", from: "3.0.0"),
+    .package(url: "https://github.com/Outdooractive/gis-tools-csv", from: "3.0.0"),
 ],
 targets: [
     .target(name: "MyTarget", dependencies: [
@@ -37,7 +37,7 @@ targets: [
 ```
 
 Use a `gis-tools-csv` release whose `gis-tools` pin matches your project. This
-branch targets `gis-tools` `3.0.0-beta.5`.
+release targets `gis-tools` 3.0.0.
 
 ## Usage
 

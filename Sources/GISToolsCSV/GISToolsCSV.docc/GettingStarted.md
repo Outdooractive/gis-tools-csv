@@ -9,8 +9,8 @@ release. Add both products to your target:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Outdooractive/gis-tools", from: "3.0.0-beta.5"),
-    .package(url: "https://github.com/Outdooractive/gis-tools-csv", from: "3.0.0-beta.1"),
+    .package(url: "https://github.com/Outdooractive/gis-tools", from: "3.0.0"),
+    .package(url: "https://github.com/Outdooractive/gis-tools-csv", from: "3.0.0"),
 ],
 targets: [
     .target(
@@ -23,7 +23,7 @@ targets: [
 ```
 
 Use a `gis-tools-csv` release whose `gis-tools` pin matches your project.
-This branch targets `gis-tools` `3.0.0-beta.5`.
+This release targets `gis-tools` 3.0.0.
 
 ## Read a file
 
