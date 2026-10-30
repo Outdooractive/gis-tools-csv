@@ -72,7 +72,11 @@ let data = try CSVCoder.write(collection)
 
 ## Next steps
 
-- <doc:ReadingCSV> explains header mapping, geometry detection, and read
+- [Reading CSV][readingcsv] explains header mapping, geometry detection, and read
   options.
-- <doc:WritingCSV> explains layouts, geometry formats, and write options.
-- <doc:Limitations> lists what CSV cannot represent.
+- [Writing CSV][writingcsv] explains layouts, geometry formats, and write options.
+- [Limitations][limitations] lists what CSV cannot represent.
+
+[readingcsv]: https://swiftpackageindex.com/Outdooractive/gis-tools-csv/documentation/gistoolscsv/readingcsv
+[writingcsv]: https://swiftpackageindex.com/Outdooractive/gis-tools-csv/documentation/gistoolscsv/writingcsv
+[limitations]: https://swiftpackageindex.com/Outdooractive/gis-tools-csv/documentation/gistoolscsv/limitations
