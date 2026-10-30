@@ -4,9 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 3.0.0 - 2026-10-30
+
 ### Breaking changes
 
-- Updated to `gis-tools` `3.0.0-beta.5`. `Feature.geometry` is optional in
+- Updated to `gis-tools` 3.0.0. `Feature.geometry` is optional in
   that release, and unlocated features are now supported throughout the
   reader and writer.
 - A header without a geometry column and without a latitude/longitude pair now
